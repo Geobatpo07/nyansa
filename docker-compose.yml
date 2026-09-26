@@ -57,7 +57,6 @@ x-n8n: &service-n8n
 
 x-caddy: &service-caddy
   image: caddy:${CADDY_VERSION:-2.11.4-alpine}
-  container_name: nyansa-caddy
   restart: unless-stopped
   # The whole caddy/ folder is mounted so both Caddyfiles can import the
   # shared snippets; each profile selects its own Caddyfile.
@@ -296,6 +295,7 @@ services:
   nyansa-caddy-public:
     profiles: ["public"]
     <<: *service-caddy
+    container_name: nyansa-caddy-public
     networks: ['nyansa']
     ports:
       - 80:80
@@ -343,6 +343,7 @@ services:
   nyansa-caddy-tailscale:
     profiles: ["tailscale"]
     <<: *service-caddy
+    container_name: nyansa-caddy-tailscale
     network_mode: service:nyansa-tailscale
     command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile.tailscale', '--adapter', 'caddyfile']
     volumes:
