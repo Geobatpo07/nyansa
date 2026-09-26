@@ -66,6 +66,12 @@ describe('HTTP API', () => {
     expect(again.json()).toMatchObject({ mode: 'full', notes: { indexed: 2, unchanged: 0 } });
   });
 
+  it('POST /ingest accepts a JSON content type with an empty body', async () => {
+    const response = await app.inject({ method: 'POST', url: '/ingest', headers: { ...auth, 'content-type': 'application/json' } });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ mode: 'incremental' });
+  });
+
   it('POST /ingest validates the mode', async () => {
     const response = await app.inject({ method: 'POST', url: '/ingest', headers: auth, payload: { mode: 'everything' } });
     expect(response.statusCode).toBe(400);

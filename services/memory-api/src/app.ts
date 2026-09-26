@@ -40,6 +40,22 @@ export function buildApp(deps: AppDeps): FastifyInstance {
   });
   const expectedToken = Buffer.from(deps.token);
 
+  // Accept `content-type: application/json` with an empty body (the /ingest
+  // body is optional, and some clients always send the header).
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+    const text = typeof body === 'string' ? body : body.toString('utf8');
+    if (text.trim() === '') {
+      done(null, undefined);
+      return;
+    }
+    try {
+      done(null, JSON.parse(text));
+    } catch {
+      done(Object.assign(new Error('invalid JSON body'), { statusCode: 400 }), undefined);
+    }
+  });
+
   // Every route except /health needs `Authorization: Bearer <MEMORY_API_TOKEN>`.
   app.addHook('onRequest', async (request, reply) => {
     if (request.routeOptions.url === '/health') {
