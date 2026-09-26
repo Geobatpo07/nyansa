@@ -1,13 +1,18 @@
 import type { ChunkPoint, ParsedNote } from '../domain.js';
 import { chunkNote, type ChunkOptions } from '../markdown/chunk.js';
 import { parseNote } from '../markdown/parse.js';
-import type { Embedder, Logger, VectorStore } from '../ports.js';
+import { UpstreamError, type Embedder, type Logger, type VectorStore } from '../ports.js';
 import { listNotes, readNote, sha256, type VaultFile } from '../vault/vault.js';
 import { planIngest, type IngestMode } from './plan.js';
 
 // Bump when the chunking or payload format changes: every note is then
 // reindexed by the next incremental run.
 const CHUNKER_VERSION = 'chunker-v1';
+
+// After this many notes in a row fail on Ollama or Qdrant, the run stops:
+// the service is down or misconfigured, and every other note would fail the
+// same way. Skipped notes keep their old hash and are retried next run.
+const MAX_CONSECUTIVE_UPSTREAM_FAILURES = 3;
 
 export interface IngestReport {
   mode: IngestMode;
@@ -19,9 +24,13 @@ export interface IngestReport {
     unchanged: number;
     deleted: number;
     failed: number;
+    /** Not attempted because the run was aborted. */
+    skipped: number;
   };
   chunks: { upserted: number };
   errors: { path: string; message: string }[];
+  /** Set when the run stopped early (upstream service unavailable). */
+  aborted?: string;
 }
 
 export class IngestInProgressError extends Error {
@@ -76,7 +85,10 @@ export class Ingestor {
     const files = await listNotes(this.deps.vaultPath);
     const contents = new Map<string, { file: VaultFile; content: string; hash: string }>();
     for (const file of files) {
-      const { content, hash } = await readNote(file);
+      const { content, hash, encoding } = await readNote(file);
+      if (encoding !== 'utf-8') {
+        logger.warn({ path: file.path, encoding }, 'note is not valid UTF-8, decoded as Windows-1252');
+      }
       contents.set(file.path, { file, content, hash });
     }
 
@@ -91,12 +103,13 @@ export class Ingestor {
       mode,
       startedAt: started.toISOString(),
       durationMs: 0,
-      notes: { scanned: files.length, indexed: 0, unchanged: plan.unchanged.length, deleted: 0, failed: 0 },
+      notes: { scanned: files.length, indexed: 0, unchanged: plan.unchanged.length, deleted: 0, failed: 0, skipped: 0 },
       chunks: { upserted: 0 },
       errors: [],
     };
 
-    for (const path of plan.toIndex) {
+    let consecutiveUpstreamFailures = 0;
+    for (const [position, path] of plan.toIndex.entries()) {
       const note = contents.get(path);
       if (note === undefined) {
         continue;
@@ -104,10 +117,19 @@ export class Ingestor {
       try {
         report.chunks.upserted += await this.indexNote(path, note.content, note.hash);
         report.notes.indexed += 1;
+        consecutiveUpstreamFailures = 0;
       } catch (err) {
         report.notes.failed += 1;
         report.errors.push({ path, message: err instanceof Error ? err.message : String(err) });
         logger.warn({ path, err }, 'note indexing failed');
+
+        consecutiveUpstreamFailures = err instanceof UpstreamError ? consecutiveUpstreamFailures + 1 : 0;
+        if (consecutiveUpstreamFailures >= MAX_CONSECUTIVE_UPSTREAM_FAILURES) {
+          report.notes.skipped = plan.toIndex.length - position - 1;
+          report.aborted = `${consecutiveUpstreamFailures} consecutive failures of ${err instanceof UpstreamError ? err.service : 'an upstream service'}; ${report.notes.skipped} notes skipped, retried on the next run`;
+          logger.error({ skipped: report.notes.skipped }, report.aborted);
+          break;
+        }
       }
     }
 

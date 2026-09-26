@@ -38,7 +38,7 @@ One ingestion runs at a time; a concurrent call gets `409`.
   "mode": "incremental",
   "startedAt": "2026-09-26T15:07:10.000Z",
   "durationMs": 2290,
-  "notes": { "scanned": 4, "indexed": 4, "unchanged": 0, "deleted": 0, "failed": 0 },
+  "notes": { "scanned": 4, "indexed": 4, "unchanged": 0, "deleted": 0, "failed": 0, "skipped": 0 },
   "chunks": { "upserted": 6 },
   "errors": []
 }
@@ -46,6 +46,16 @@ One ingestion runs at a time; a concurrent call gets `409`.
 
 A note that fails (for example an embedding error) is listed in `errors`. Its
 previous version stays in the index, and the next run retries it.
+
+When 3 notes in a row fail on Ollama or Qdrant (service down, model
+missing), the run stops instead of failing every remaining note: the report
+gets an `aborted` message and `notes.skipped` counts the notes not attempted.
+They are retried by the next run.
+
+The first full ingestion is bounded by the embedding speed. On a CPU-only
+host, expect about 2 chunks per second (a 500-note vault of 2,250 chunks took
+17 minutes in testing). Later incremental runs only embed the changed notes
+(8 changed notes: 11 seconds).
 
 ### `POST /search`
 
@@ -160,7 +170,8 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/sear
 
 ## Known limits
 
-- Only Markdown files are indexed (no PDF or image content).
+- Only Markdown files are indexed (no PDF or image content). Notes are read as
+  UTF-8; a file that is not valid UTF-8 is decoded as Windows-1252 and logged.
 - Setext headings (`Title` underlined with `===`) are not treated as
   headings.
 - `nomic-embed-text` is trained mostly on English. French notes are found,
