@@ -17,6 +17,10 @@ volumes:
     name: nyansa_caddy_data
   nyansa_caddy_config:
     name: nyansa_caddy_config
+  nyansa_tailscale_state:
+    name: nyansa_tailscale_state
+  nyansa_tailscale_socket:
+    name: nyansa_tailscale_socket
 
 networks:
   nyansa:
@@ -46,6 +50,9 @@ x-caddy: &service-caddy
   image: caddy:${CADDY_VERSION:-2.11.4-alpine}
   container_name: nyansa-caddy
   restart: unless-stopped
+  # The whole caddy/ folder is mounted so both Caddyfiles can import the
+  # shared snippets; each profile selects its own Caddyfile.
+  working_dir: /etc/caddy
   environment:
     - ACME_EMAIL=${ACME_EMAIL:-}
     - WEBUI_DOMAIN=${WEBUI_DOMAIN:-}
@@ -268,7 +275,60 @@ services:
       - 80:80
       - 443:443
       - 443:443/udp
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile.public', '--adapter', 'caddyfile']
     volumes:
       - nyansa_caddy_data:/data
       - nyansa_caddy_config:/config
-      - ./caddy/Caddyfile.public:/etc/caddy/Caddyfile:ro
+      - ./caddy:/etc/caddy:ro
+
+  # Private access over Tailscale: no port published on the host. Caddy joins
+  # this container's network namespace and serves HTTPS on the tailnet only.
+  nyansa-tailscale:
+    profiles: ["tailscale"]
+    image: tailscale/tailscale:${TAILSCALE_VERSION:-v1.102.5}
+    container_name: nyansa-tailscale
+    hostname: ${TS_HOSTNAME:-nyansa}
+    networks: ['nyansa']
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-nyansa}
+      # The auth key is only used for the first login; the node identity is
+      # then kept in the state volume.
+      - TS_AUTH_ONCE=true
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      - TS_USERSPACE=false
+      - TS_ENABLE_HEALTH_CHECK=true
+      - TS_LOCAL_ADDR_PORT=127.0.0.1:9002
+    volumes:
+      - nyansa_tailscale_state:/var/lib/tailscale
+      - nyansa_tailscale_socket:/var/run/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:9002/healthz']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nyansa-caddy-tailscale:
+    profiles: ["tailscale"]
+    <<: *service-caddy
+    network_mode: service:nyansa-tailscale
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile.tailscale', '--adapter', 'caddyfile']
+    volumes:
+      - nyansa_caddy_data:/data
+      - nyansa_caddy_config:/config
+      - ./caddy:/etc/caddy:ro
+      # tailscaled socket, used by Caddy to get the *.ts.net certificate.
+      - nyansa_tailscale_socket:/var/run/tailscale
+    depends_on:
+      nyansa-tailscale:
+        condition: service_healthy
+      nyansa-n8n:
+        condition: service_started
+      nyansa-open-webui:
+        condition: service_started

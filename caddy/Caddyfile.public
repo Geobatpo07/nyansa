@@ -5,26 +5,15 @@
 	email {$ACME_EMAIL}
 }
 
-(security_headers) {
-	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		X-Content-Type-Options "nosniff"
-		Referrer-Policy "strict-origin-when-cross-origin"
-		Content-Security-Policy "frame-ancestors 'self'"
-		-Server
-		-X-Powered-By
-	}
-}
-
 {$WEBUI_DOMAIN} {
-	import security_headers
+	import security-headers.caddy
 	encode zstd gzip
 	# Open WebUI has its own login; public sign-up is disabled in compose.
 	reverse_proxy nyansa-open-webui:8080
 }
 
 {$N8N_DOMAIN} {
-	import security_headers
+	import security-headers.caddy
 	encode zstd gzip
 
 	# Webhooks are called by external services and carry their own auth
