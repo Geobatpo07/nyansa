@@ -244,6 +244,53 @@ services:
         condition: service_started
         required: false
 
+  # RAG service: indexes the vault into Qdrant and answers /search.
+  # Internal only; n8n calls it at http://nyansa-memory-api:8080 with
+  # MEMORY_API_TOKEN. The image tag is replaced by the commit SHA in each
+  # release (scripts/build-publish.sh), so a rollback restarts the old image.
+  nyansa-memory-api:
+    build:
+      context: ./services/memory-api
+    image: nyansa-memory-api:${NYANSA_RELEASE:-dev}
+    hostname: nyansa-memory-api
+    container_name: nyansa-memory-api
+    networks: ['nyansa']
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    environment:
+      - MEMORY_API_TOKEN=${MEMORY_API_TOKEN:?set MEMORY_API_TOKEN in .env}
+      - QDRANT_API_KEY=${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}
+      - QDRANT_URL=http://nyansa-qdrant:6333
+      - OLLAMA_URL=http://nyansa-ollama:11434
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - CHUNK_MAX_CHARS=${CHUNK_MAX_CHARS:-1500}
+      - VAULT_PATH=/vault
+      - LOG_LEVEL=${MEMORY_API_LOG_LEVEL:-info}
+    volumes:
+      # The service only reads the vault.
+      - ${OBSIDIAN_VAULT_PATH}:/vault:ro
+    healthcheck:
+      # /health checks Ollama and Qdrant too.
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    depends_on:
+      nyansa-qdrant:
+        condition: service_healthy
+      nyansa-ollama-cpu:
+        condition: service_started
+        required: false
+      nyansa-ollama-gpu:
+        condition: service_started
+        required: false
+      nyansa-ollama-gpu-amd:
+        condition: service_started
+        required: false
+
   nyansa-ollama-cpu:
     profiles: ["cpu"]
     <<: *service-ollama
