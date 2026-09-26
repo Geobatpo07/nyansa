@@ -22,8 +22,14 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
   skipped if workflows already exist.
 - **Obsidian vault access.** The vault folder set in `OBSIDIAN_VAULT_PATH` is
   mounted read/write into n8n at `/data/obsidian-vault`.
-- **Vector store.** Qdrant, protected by an API key that n8n receives at
-  runtime.
+- **RAG over the vault (`memory-api`).** A TypeScript service parses the notes
+  (frontmatter, tags, `[[wikilinks]]`), splits them along their headings,
+  embeds them with `nomic-embed-text` and stores them in Qdrant with their
+  path, title, tags, section and content hash. Indexing is incremental: only
+  changed notes are re-embedded and deleted notes are removed. `/search`
+  returns the relevant chunks with their source note for citations.
+- **Vector store.** Qdrant, protected by an API key that n8n and memory-api
+  receive at runtime.
 - **Chat interface.** Open WebUI connected to Ollama.
 - **Secure access, two modes.** Caddy serves Open WebUI and the n8n editor
   over HTTPS, either on a public domain (Let's Encrypt, basic auth in front of
@@ -60,6 +66,7 @@ flowchart LR
             qdrant[("nyansa-qdrant<br/>vector store, API key")]
             ollama["nyansa-ollama<br/>qwen2.5:3b, nomic-embed-text"]
             pull["nyansa-ollama-pull-model<br/>one-shot model download"]
+            memory["nyansa-memory-api<br/>TypeScript RAG service<br/>/ingest, /search"]
         end
     end
 
@@ -76,10 +83,14 @@ flowchart LR
     n8n -- "chat and embeddings" --> ollama
     webui -- "chat" --> ollama
     pull -- "pull models" --> ollama
+    vault -- "read-only /vault" --> memory
+    n8n -- "/ingest, /search (bearer token)" --> memory
+    memory -- "embeddings" --> ollama
+    memory -- "chunks + metadata (api-key)" --> qdrant
 ```
 
-Only Caddy is reachable from outside. PostgreSQL, Qdrant and Ollama publish no
-port. n8n and Open WebUI listen on `127.0.0.1` for SSH tunnels only. The Ollama
+Only Caddy is reachable from outside. PostgreSQL, Qdrant, Ollama and
+memory-api publish no port. n8n and Open WebUI listen on `127.0.0.1` for SSH tunnels only. The Ollama
 container is named `nyansa-ollama` whatever the hardware profile.
 
 ## Tech stack
@@ -93,6 +104,7 @@ container is named `nyansa-ollama` whatever the hardware profile.
 | Open WebUI | `ghcr.io/open-webui/open-webui:v0.7.2` | Browser chat interface for Ollama |
 | Caddy | `caddy:2.11.4-alpine` | Reverse proxy, automatic HTTPS |
 | Tailscale | `tailscale/tailscale:v1.102.5` | Private access (tailscale profile) |
+| memory-api | built from `services/memory-api` (Node.js 24, Fastify, TypeScript) | Vault ingestion and semantic search |
 | `qwen2.5:3b` | Ollama model | Chat model |
 | `nomic-embed-text` | Ollama model | Embedding model |
 
@@ -106,7 +118,8 @@ needs authentication over HTTPS, and that no secret lives in the repository.
 
 | Measure | Where |
 |---|---|
-| PostgreSQL, Qdrant and Ollama publish no port; they are only reachable on the internal `nyansa` network. | `docker-compose.yml` |
+| PostgreSQL, Qdrant, Ollama and memory-api publish no port; they are only reachable on the internal `nyansa` network. | `docker-compose.yml` |
+| memory-api requires a bearer token (constant-time comparison), runs as a non-root user with a read-only root filesystem, no Linux capabilities and a read-only vault mount. | `docker-compose.yml`, `services/memory-api` |
 | n8n and Open WebUI are bound to `127.0.0.1`; outside access goes through Caddy. | `docker-compose.yml` |
 | Docker bypasses UFW for published ports, so exposure is enforced in Compose and checked for all 9 profile combinations. | `scripts/check-exposure.sh` |
 | HTTPS everywhere: Let's Encrypt (public) or tailnet certificates (tailscale). HSTS, `nosniff`, `frame-ancestors 'self'`, no `Server` header. | `caddy/` |
@@ -168,6 +181,7 @@ Edit `.env` and set at least:
 | `N8N_USER_MANAGEMENT_JWT_SECRET` | Secret for n8n session tokens |
 | `WEBUI_SECRET_KEY` | Secret for Open WebUI sessions |
 | `QDRANT_API_KEY` | Qdrant API key |
+| `MEMORY_API_TOKEN` | Bearer token of memory-api (32+ characters) |
 | `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_PASSWORD` | First Open WebUI admin account |
 | `OBSIDIAN_VAULT_PATH` | Absolute path to your vault on the host |
 
@@ -179,9 +193,24 @@ Generate each secret with `openssl rand -hex 32`, or in PowerShell with
 Locally, no access profile is needed:
 
 ```bash
-docker compose --profile cpu up -d
+docker compose --profile cpu up -d --build
 docker logs -f nyansa-ollama-pull-model   # first start: model download
 ```
+
+Index the vault and ask a question (memory-api is internal, so the calls go
+through a container on the `nyansa` network):
+
+```bash
+TOKEN=<MEMORY_API_TOKEN from .env>
+docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/ingest \
+  -H "authorization: Bearer $TOKEN"
+docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/search \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"query": "What did I write about Docker?", "limit": 3}'
+```
+
+The API, the indexing design and its limits are documented in
+[services/memory-api/README.md](services/memory-api/README.md).
 
 ### Access
 
@@ -190,7 +219,7 @@ docker logs -f nyansa-ollama-pull-model   # first start: model download
 | Open WebUI | <http://localhost:3000> (log in with `WEBUI_ADMIN_EMAIL`) |
 | n8n editor | <http://localhost:5678> |
 
-Qdrant and Ollama are internal only. To open the Qdrant dashboard temporarily:
+Qdrant, Ollama and memory-api are internal only. To open the Qdrant dashboard temporarily:
 
 ```bash
 docker run --rm --network nyansa -p 127.0.0.1:6333:6333 alpine/socat:1.8.1.3 \
@@ -198,9 +227,10 @@ docker run --rm --network nyansa -p 127.0.0.1:6333:6333 alpine/socat:1.8.1.3 \
 # then http://localhost:6333/dashboard, with QDRANT_API_KEY
 ```
 
-### Checks
+### Tests and checks
 
 ```bash
+cd services/memory-api && npm ci && npm test && npm run typecheck && cd ../..
 scripts/check-exposure.sh --env-file .env.example   # port exposure, 9 profile combinations
 scripts/check-secrets.sh HEAD                       # tracked secrets
 scripts/build-publish.sh HEAD                       # build and validate ./publish
@@ -213,6 +243,8 @@ scripts/build-publish.sh HEAD                       # build and validate ./publi
 ├── docker-compose.yml        # Services, volumes, network; hardware and access profiles
 ├── .env.example              # Template for secrets, URLs, profiles and paths
 ├── caddy/                    # Caddyfiles for the public and tailscale profiles
+├── services/
+│   └── memory-api/           # TypeScript RAG service: parsing, chunking, ingestion, search (+ Vitest)
 ├── n8n/
 │   └── demo-data/
 │       ├── credentials/      # n8n credentials (Ollama, Qdrant), no secret, imported on first boot
@@ -236,8 +268,8 @@ scripts/build-publish.sh HEAD                       # build and validate ./publi
 
 ## Roadmap
 
-- RAG ingestion service for the Obsidian vault (`services/memory-api`), with
-  source citations in chat.
+- n8n workflows: scheduled ingestion, and a chat agent that answers from
+  `/search` and cites the notes it used.
 - Graph memory built from wikilinks, backlinks and tags.
 - Sync the Obsidian vault across devices with Syncthing.
 - CI: lint, typecheck, tests and Compose validation.
