@@ -7,6 +7,7 @@
 
 {$WEBUI_DOMAIN} {
 	import security-headers.caddy
+	import errors.caddy
 	encode zstd gzip
 	# Open WebUI has its own login; public sign-up is disabled in compose.
 	reverse_proxy nyansa-open-webui:8080
@@ -14,6 +15,7 @@
 
 {$N8N_DOMAIN} {
 	import security-headers.caddy
+	import errors.caddy
 	encode zstd gzip
 
 	# Webhooks are called by external services and carry their own auth
