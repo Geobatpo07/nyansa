@@ -19,6 +19,7 @@ git rev-parse --verify --quiet "$rev^{commit}" >/dev/null || die "unknown revisi
 FILE_PATTERN='(^|/)\.env(\..+)?$|\.(pem|key|p12|pfx|jks|kdbx)$|(^|/)id_(rsa|dsa|ecdsa|ed25519)$'
 ALLOWED_FILES='(^|/)\.env\.example$'
 
+# shellcheck disable=SC2016 # regular expressions, not shell expansions
 CONTENT_PATTERNS=(
 	'-----BEGIN [A-Z ]*PRIVATE KEY-----'
 	'tskey-[a-z]+-[A-Za-z0-9]{8,}-[A-Za-z0-9]{16,}'
@@ -32,7 +33,7 @@ found=0
 files=$(git ls-tree -r --name-only "$rev" | grep -E "$FILE_PATTERN" | grep -Ev "$ALLOWED_FILES" || true)
 if [[ -n "$files" ]]; then
 	echo "Secret files tracked in $rev:" >&2
-	sed 's/^/  - /' <<<"$files" >&2
+	indent <<<"$files" >&2
 	found=1
 fi
 
@@ -44,7 +45,7 @@ done
 matches=$(git grep -I -n -E "${grep_args[@]}" "$rev" -- . ':!scripts/check-secrets.sh' || true)
 if [[ -n "$matches" ]]; then
 	echo "Possible secrets in tracked content of $rev:" >&2
-	sed 's/^/  - /' <<<"$matches" >&2
+	indent <<<"$matches" >&2
 	found=1
 fi
 

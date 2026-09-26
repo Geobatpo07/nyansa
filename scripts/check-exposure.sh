@@ -71,7 +71,7 @@ for hardware in cpu gpu-nvidia gpu-amd; do
 		violations=$(jq -r "$RULES" <<<"$json")
 		if [[ -n "$violations" ]]; then
 			echo "FAIL [$label]" >&2
-			sed 's/^/  - /' <<<"$violations" >&2
+			indent <<<"$violations" >&2
 			failures=$((failures + 1))
 		else
 			echo "ok   [$label]"

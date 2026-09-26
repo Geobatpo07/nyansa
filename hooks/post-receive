@@ -197,8 +197,8 @@ main() {
 	exec 9>"$NYANSA_ROOT/.deploy.lock"
 	flock -n 9 || fail "another deployment is running"
 
-	local old new ref deployed=0
-	while read -r old new ref; do
+	local new ref deployed=0
+	while read -r _ new ref; do
 		if [[ "$ref" != "$DEPLOY_BRANCH" ]]; then
 			log "ignoring $ref (only ${DEPLOY_BRANCH#refs/heads/} is deployed)"
 			continue

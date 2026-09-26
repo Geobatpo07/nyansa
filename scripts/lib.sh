@@ -3,6 +3,7 @@
 
 # Compose project name. Fixed so every release drives the same containers
 # and volumes (docker-compose.yml also sets `name: nyansa`).
+# shellcheck disable=SC2034 # used by the scripts that source this file
 NYANSA_PROJECT=nyansa
 
 log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
@@ -20,27 +21,5 @@ container_exists() { docker container inspect "$1" >/dev/null 2>&1; }
 container_running() { [[ "$(docker container inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" == "true" ]]; }
 volume_exists() { docker volume inspect "$1" >/dev/null 2>&1; }
 
-# Reads KEY from a dotenv file without executing it. Strips one level of
-# surrounding single or double quotes. Prints the default when absent.
-env_value() {
-	local file=$1 key=$2 default=${3-} line value
-	line=$(grep -E "^${key}=" "$file" 2>/dev/null | tail -n 1 || true)
-	if [[ -z "$line" ]]; then
-		printf '%s' "$default"
-		return
-	fi
-	value=${line#*=}
-	value=${value%$'\r'}
-	if [[ "$value" =~ ^\"(.*)\"$ || "$value" =~ ^\'(.*)\'$ ]]; then
-		value=${BASH_REMATCH[1]}
-	fi
-	printf '%s' "$value"
-}
-
-# Turns "cpu public" or "cpu,public" into: --profile cpu --profile public
-profile_args() {
-	local profile
-	for profile in ${1//,/ }; do
-		printf -- '--profile\n%s\n' "$profile"
-	done
-}
+# Prefixes each line of stdin with "  - " (used for lists of problems).
+indent() { sed 's/^/  - /'; }

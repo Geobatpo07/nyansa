@@ -26,6 +26,7 @@ case "${1:-}" in
 	repo=${3:-nyansa.git}
 	require_cmd scp ssh
 	scp "$root/hooks/post-receive" "$host:$repo/hooks/post-receive"
+	# shellcheck disable=SC2029 # $repo is meant to expand on this side
 	ssh "$host" "chmod 755 '$repo/hooks/post-receive'"
 	log "post-receive installed in $host:$repo"
 	;;
