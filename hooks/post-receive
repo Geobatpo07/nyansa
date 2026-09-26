@@ -7,7 +7,7 @@
 #   2. link    releases/<sha>/.env -> shared/.env
 #   3. check   docker compose config with the production .env
 #   4. backup  scripts/backup.sh (from the new release)
-#   5. deploy  docker compose pull, then up -d from the new release
+#   5. deploy  docker compose pull and build, then up -d from the new release
 #   6. wait    until every container is healthy
 #   7. switch  current -> releases/<sha>, then prune old releases
 #
@@ -95,6 +95,8 @@ prune_releases() {
 		[[ "$name" == "$active_name" || "$name" == "$previous_name" ]] && continue
 		log "removing old release $name"
 		rm -rf "$path"
+		# Images built for that release (tagged with its short SHA).
+		docker image rm "nyansa-memory-api:${name:0:12}" >/dev/null 2>&1 || true
 	done < <(find "$RELEASES" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
 }
 
@@ -159,9 +161,10 @@ deploy() {
 	BACKUP_DIR=$NYANSA_ROOT/backups bash "$release/scripts/backup.sh" ||
 		fail "backup failed; the stack was not touched"
 
-	# 5. Pull images, then start the new release. From here on, a failure
-	# restores the previous release.
+	# 5. Pull and build images, then start the new release. From here on, a
+	# failure restores the previous release.
 	compose "$release" pull --quiet --ignore-buildable || fail "image pull failed; the stack was not touched"
+	compose "$release" build || fail "image build failed; the stack was not touched"
 
 	if ! compose "$release" up -d --remove-orphans; then
 		rollback "$previous"

@@ -20,8 +20,8 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 # Paths copied from the commit into the release. Directories are copied
-# whole. services/memory-api (phase 2) will be added here with its build
-# output only.
+# whole. For memory-api, only the Docker build inputs are shipped (no tests,
+# no dev configuration); the image is built on the server.
 RUNTIME_PATHS=(
 	docker-compose.yml
 	caddy
@@ -31,6 +31,13 @@ RUNTIME_PATHS=(
 	scripts/restore.sh
 	scripts/check-exposure.sh
 	scripts/wait-healthy.sh
+	services/memory-api/Dockerfile
+	services/memory-api/.dockerignore
+	services/memory-api/package.json
+	services/memory-api/package-lock.json
+	services/memory-api/tsconfig.json
+	services/memory-api/tsconfig.build.json
+	services/memory-api/src
 )
 
 usage() {
@@ -89,6 +96,14 @@ for path in "${RUNTIME_PATHS[@]}"; do
 	cp -R "$work/src/$path" "$output/$path"
 done
 chmod +x "$output"/scripts/*.sh
+
+# Locally built images are tagged with the release, so each release (and a
+# rollback to it) runs the image built from its own sources.
+# shellcheck disable=SC2016 # literal placeholder, not an expansion
+grep -qF '${NYANSA_RELEASE:-dev}' "$output/docker-compose.yml" ||
+	die 'docker-compose.yml has no ${NYANSA_RELEASE:-dev} image tag to pin'
+sed -i.bak "s/\${NYANSA_RELEASE:-dev}/${sha:0:12}/g" "$output/docker-compose.yml"
+rm -f "$output/docker-compose.yml.bak"
 
 cat >"$output/RELEASE" <<EOF
 commit=$sha
