@@ -13,6 +13,10 @@ volumes:
     name: nyansa_qdrant_storage
   nyansa_openwebui_storage:
     name: nyansa_openwebui_storage
+  nyansa_caddy_data:
+    name: nyansa_caddy_data
+  nyansa_caddy_config:
+    name: nyansa_caddy_config
 
 networks:
   nyansa:
@@ -37,6 +41,30 @@ x-n8n: &service-n8n
     # Injects the Qdrant API key into every credential of type qdrantApi at
     # runtime. The key lives only in .env; rotating it needs a restart only.
     - 'CREDENTIALS_OVERWRITE_DATA={"qdrantApi":{"apiKey":"${QDRANT_API_KEY}"}}'
+
+x-caddy: &service-caddy
+  image: caddy:${CADDY_VERSION:-2.11.4-alpine}
+  container_name: nyansa-caddy
+  restart: unless-stopped
+  environment:
+    - ACME_EMAIL=${ACME_EMAIL:-}
+    - WEBUI_DOMAIN=${WEBUI_DOMAIN:-}
+    - N8N_DOMAIN=${N8N_DOMAIN:-}
+    - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-}
+    - N8N_BASIC_AUTH_HASH=${N8N_BASIC_AUTH_HASH:-}
+    - TS_HOSTNAME=${TS_HOSTNAME:-}
+    - TS_TAILNET=${TS_TAILNET:-}
+  healthcheck:
+    # Admin API, only reachable from inside the container's network namespace.
+    test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:2019/config/']
+    interval: 10s
+    timeout: 5s
+    retries: 10
+  depends_on:
+    nyansa-n8n:
+      condition: service_started
+    nyansa-open-webui:
+      condition: service_started
 
 x-ollama: &service-ollama
   image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}
@@ -225,3 +253,22 @@ services:
     image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}-rocm
     depends_on:
       - nyansa-ollama-gpu-amd
+
+  # ---------------------------------------------------------------------------
+  # Access profiles: enable exactly one of "public" or "tailscale".
+  # ---------------------------------------------------------------------------
+
+  # Public HTTPS on ports 80/443 with Let's Encrypt. The only service allowed
+  # to publish ports on all interfaces.
+  nyansa-caddy-public:
+    profiles: ["public"]
+    <<: *service-caddy
+    networks: ['nyansa']
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    volumes:
+      - nyansa_caddy_data:/data
+      - nyansa_caddy_config:/config
+      - ./caddy/Caddyfile.public:/etc/caddy/Caddyfile:ro
