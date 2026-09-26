@@ -330,7 +330,7 @@ On the server:
 ```bash
 cd /opt/nyansa/current
 cat RELEASE
-docker ps --filter label=com.docker.compose.project=nyansa --format 'table {{.Names}}	{{.Status}}'
+docker ps --filter label=com.docker.compose.project=nyansa --format 'table {{.Names}}\t{{.Status}}'
 scripts/check-exposure.sh                        # exposure rules with the real .env
 sudo ss -tlnp | grep -E ':(80|443|3000|5678|6333|11434)\b'
 ```
