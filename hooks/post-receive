@@ -1,0 +1,221 @@
+#!/usr/bin/env bash
+# Server-side deploy hook, installed in the bare repository (e.g.
+# ~/nyansa.git/hooks/post-receive) and run by a dedicated non-root user in
+# the docker group. Deploys each push to main:
+#
+#   1. build   releases/<sha>/ with the commit's scripts/build-publish.sh
+#   2. link    releases/<sha>/.env -> shared/.env
+#   3. check   docker compose config with the production .env
+#   4. backup  scripts/backup.sh (from the new release)
+#   5. deploy  docker compose pull, then up -d from the new release
+#   6. wait    until every container is healthy
+#   7. switch  current -> releases/<sha>, then prune old releases
+#
+# Any failure leaves `current` untouched. If the stack was already changed,
+# the previous release is started again. The hook then exits non-zero and
+# its output appears in the terminal of `git push`.
+#
+# Layout (NYANSA_ROOT, default /opt/nyansa):
+#   releases/<sha>/   one folder per deployed commit
+#   current           symlink to the active release
+#   shared/.env       production environment, never in git or a release
+#   backups/          output of scripts/backup.sh
+#   logs/             one timestamped log per deployment
+#
+# Settings read from shared/.env: NYANSA_PROFILES (e.g. "cpu public"),
+# NYANSA_KEEP_RELEASES (default 5), NYANSA_HEALTH_TIMEOUT (default 300).
+#
+# Manual re-run of the last commit, from the bare repository:
+#   echo "0 $(git rev-parse main) refs/heads/main" | hooks/post-receive
+set -Eeuo pipefail
+
+NYANSA_ROOT=${NYANSA_ROOT:-/opt/nyansa}
+DEPLOY_BRANCH=refs/heads/main
+PROJECT=nyansa
+
+RELEASES=$NYANSA_ROOT/releases
+SHARED_ENV=$NYANSA_ROOT/shared/.env
+CURRENT=$NYANSA_ROOT/current
+
+log() { printf '[%s] %s\n' "$(date -u +%H:%M:%S)" "$*"; }
+fail() {
+	printf '[%s] DEPLOY FAILED: %s\n' "$(date -u +%H:%M:%S)" "$*" >&2
+	exit 1
+}
+
+# Same parser as scripts/lib.sh (the hook runs before any release exists).
+env_value() {
+	local key=$1 default=$2 line value
+	line=$(grep -E "^${key}=" "$SHARED_ENV" | tail -n 1 || true)
+	[[ -n "$line" ]] || { printf '%s' "$default"; return; }
+	value=${line#*=}
+	value=${value%$'\r'}
+	if [[ "$value" =~ ^\"(.*)\"$ || "$value" =~ ^\'(.*)\'$ ]]; then
+		value=${BASH_REMATCH[1]}
+	fi
+	printf '%s' "$value"
+}
+
+compose() {
+	local release=$1
+	shift
+	docker compose -p "$PROJECT" \
+		--project-directory "$release" \
+		-f "$release/docker-compose.yml" \
+		--env-file "$SHARED_ENV" \
+		"${PROFILE_ARGS[@]}" "$@"
+}
+
+# Starts the previous release again after a failed deployment.
+rollback() {
+	local previous=$1
+	if [[ -z "$previous" ]]; then
+		log "no previous release to restore; the stack is left as is for inspection"
+		return
+	fi
+	log "restoring previous release $(basename "$previous")"
+	if compose "$previous" up -d --remove-orphans &&
+		bash "$previous/scripts/wait-healthy.sh" "$HEALTH_TIMEOUT"; then
+		log "previous release $(basename "$previous") is running again"
+	else
+		log "ROLLBACK FAILED: inspect the stack manually (docs/DEPLOY.md, Rollback)"
+	fi
+}
+
+# Keeps the newest releases. The active and the previous release are never
+# removed. Releases are compared by name (commit SHA), not by path, so that
+# symlinked roots do not defeat the check.
+prune_releases() {
+	local keep=$1 previous_name=$2 active_name count=0 path name
+	active_name=$(basename "$(readlink -f "$CURRENT")")
+	while read -r path; do
+		count=$((count + 1))
+		((count > keep)) || continue
+		name=$(basename "$path")
+		[[ "$name" == "$active_name" || "$name" == "$previous_name" ]] && continue
+		log "removing old release $name"
+		rm -rf "$path"
+	done < <(find "$RELEASES" -mindepth 1 -maxdepth 1 -type d ! -name '.*' -printf '%T@ %p\n' | sort -rn | cut -d' ' -f2-)
+}
+
+deploy() {
+	local sha=$1 short=${1:0:12}
+	local release=$RELEASES/$sha staging=$RELEASES/.staging-$sha
+	local previous=""
+
+	[[ -f "$SHARED_ENV" ]] || fail "$SHARED_ENV is missing (see docs/DEPLOY.md)"
+
+	local profiles
+	profiles=$(env_value NYANSA_PROFILES "")
+	[[ -n "$profiles" ]] || fail "NYANSA_PROFILES is not set in $SHARED_ENV"
+	KEEP_RELEASES=$(env_value NYANSA_KEEP_RELEASES 5)
+	HEALTH_TIMEOUT=$(env_value NYANSA_HEALTH_TIMEOUT 300)
+	PROFILE_ARGS=()
+	for profile in ${profiles//,/ }; do
+		PROFILE_ARGS+=(--profile "$profile")
+	done
+
+	# Relative host paths would resolve inside each release folder, so data
+	# written there would disappear with the release.
+	local files_path
+	files_path=$(env_value NYANSA_FILES_PATH "")
+	[[ "$files_path" == /* ]] || fail "NYANSA_FILES_PATH must be an absolute path in $SHARED_ENV"
+
+	if [[ -L "$CURRENT" ]]; then
+		previous=$(readlink -f "$CURRENT")
+	fi
+	log "deploying $short with profiles: $profiles"
+	log "previous release: $([[ -n "$previous" ]] && basename "$previous" || echo none)"
+
+	# 1. Build with the build script of the pushed commit (it sources the
+	# lib.sh exported next to it).
+	local export_dir
+	export_dir=$(mktemp -d)
+	git archive "$sha" scripts | tar -x -C "$export_dir"
+	rm -rf "$staging"
+	if ! bash "$export_dir/scripts/build-publish.sh" --output "$staging" --branch main "$sha"; then
+		rm -rf "$export_dir" "$staging"
+		fail "build-publish.sh failed; the stack was not touched"
+	fi
+	rm -rf "$export_dir"
+
+	# A release folder only depends on its commit: when it already exists
+	# (re-run, or redeploy of an older commit), keep it so running containers
+	# keep valid bind mounts.
+	if [[ -d "$release" ]]; then
+		log "release folder for $short already exists; reusing it"
+		rm -rf "$staging"
+	else
+		mv "$staging" "$release"
+	fi
+
+	# 2. Production environment, shared by every release.
+	ln -sfn "$SHARED_ENV" "$release/.env"
+
+	# 3. Configuration check with the real .env.
+	compose "$release" config -q || fail "docker compose config failed with $SHARED_ENV; the stack was not touched"
+
+	# 4. Backup of the current state before any change.
+	BACKUP_DIR=$NYANSA_ROOT/backups bash "$release/scripts/backup.sh" ||
+		fail "backup failed; the stack was not touched"
+
+	# 5. Pull images, then start the new release. From here on, a failure
+	# restores the previous release.
+	compose "$release" pull --quiet --ignore-buildable || fail "image pull failed; the stack was not touched"
+
+	if ! compose "$release" up -d --remove-orphans; then
+		rollback "$previous"
+		fail "docker compose up failed for $short"
+	fi
+
+	# 6. Wait for a healthy stack.
+	if ! bash "$release/scripts/wait-healthy.sh" "$HEALTH_TIMEOUT"; then
+		compose "$release" ps -a || true
+		rollback "$previous"
+		fail "$short did not become healthy"
+	fi
+
+	# 7. Switch atomically, then prune.
+	ln -sfn "$release" "$CURRENT.new"
+	mv -Tf "$CURRENT.new" "$CURRENT"
+	log "current -> $short"
+	prune_releases "$KEEP_RELEASES" "$([[ -n "$previous" ]] && basename "$previous")"
+	log "deployment of $short succeeded"
+}
+
+main() {
+	[[ "$(id -u)" -ne 0 ]] || fail "run the deploy hook as the dedicated nyansa user, not root"
+	local cmd
+	for cmd in docker git flock jq sha256sum; do
+		command -v "$cmd" >/dev/null || fail "required command not found: $cmd"
+	done
+	docker info >/dev/null 2>&1 || fail "cannot reach the Docker daemon (is $(id -un) in the docker group?)"
+
+	mkdir -p "$RELEASES" "$NYANSA_ROOT/logs" "$NYANSA_ROOT/backups"
+
+	# One deployment at a time.
+	exec 9>"$NYANSA_ROOT/.deploy.lock"
+	flock -n 9 || fail "another deployment is running"
+
+	local old new ref deployed=0
+	while read -r old new ref; do
+		if [[ "$ref" != "$DEPLOY_BRANCH" ]]; then
+			log "ignoring $ref (only ${DEPLOY_BRANCH#refs/heads/} is deployed)"
+			continue
+		fi
+		if [[ "$new" =~ ^0+$ ]]; then
+			log "branch deleted; nothing to deploy"
+			continue
+		fi
+		local logfile
+		logfile=$NYANSA_ROOT/logs/deploy-$(date -u +%Y%m%dT%H%M%SZ)-${new:0:12}.log
+		log "log: $logfile"
+		# Everything below goes to the push terminal and to the log file.
+		exec > >(tee -a "$logfile") 2>&1
+		deploy "$new"
+		deployed=1
+	done
+	((deployed)) || log "no deployment"
+}
+
+main "$@"
