@@ -1,0 +1,10 @@
+# Everything that runs on the Linux server must keep LF line endings, even when
+# the repository is checked out on Windows with core.autocrlf=true.
+* text=auto
+*.sh text eol=lf
+hooks/* text eol=lf
+caddy/* text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+.env* text eol=lf
+*.gif binary
