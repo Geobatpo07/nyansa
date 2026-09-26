@@ -379,7 +379,9 @@ night, add a cron entry for `nyansa` (`crontab -e`):
 Each backup contains a PostgreSQL dump, archives of the n8n, Qdrant,
 Open WebUI, Caddy and Tailscale volumes, a manifest and checksums. The
 services writing to those volumes are stopped for a few seconds during the
-copy. Backups are kept 14 days (`BACKUP_RETENTION_DAYS`). They are not
+copy. Downloaded models are left out (the Ollama volume and Open WebUI's
+`cache/`, about 1 GB): they are fetched again after a restore, which needs
+internet access. Backups are kept 14 days (`BACKUP_RETENTION_DAYS`). They are not
 encrypted and include chat history: copy them off the server to an encrypted
 destination (for example `restic`), together with a copy of `.env`.
 

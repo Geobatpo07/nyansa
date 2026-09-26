@@ -6,7 +6,9 @@
 #
 # Containers that write to the archived volumes are stopped for the copy so
 # SQLite files (Open WebUI) and Qdrant segments are consistent, then
-# restarted. Ollama models are not backed up: they are downloaded again.
+# restarted. Downloaded models are not backed up, they are fetched again:
+# the Ollama volume and Open WebUI's cache/ (embedding and Whisper models,
+# about 1 GB).
 # The .env file is NOT included; keep a copy of it (and N8N_ENCRYPTION_KEY)
 # somewhere else, or the n8n credentials cannot be decrypted after a restore.
 #
@@ -32,6 +34,10 @@ VOLUMES=(
 	nyansa_openwebui_storage
 	nyansa_caddy_data
 	nyansa_tailscale_state
+)
+# Paths (relative to the volume root) left out of each archive.
+declare -A EXCLUDES=(
+	[nyansa_openwebui_storage]=./cache
 )
 # Containers writing to those volumes, in stop order (proxies first).
 # They are restarted in reverse order.
@@ -91,10 +97,12 @@ done
 for volume in "${VOLUMES[@]}"; do
 	volume_exists "$volume" || continue
 	log "archiving volume $volume"
+	exclude=()
+	[[ -n "${EXCLUDES[$volume]:-}" ]] && exclude=(--exclude="${EXCLUDES[$volume]}")
 	docker run --rm \
 		-v "$volume:/source:ro" \
 		-v "$target:/backup" \
-		"$HELPER_IMAGE" tar -czf "/backup/$volume.tar.gz" -C /source .
+		"$HELPER_IMAGE" tar -czf "/backup/$volume.tar.gz" "${exclude[@]}" -C /source .
 	archived=$((archived + 1))
 done
 
