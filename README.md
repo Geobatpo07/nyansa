@@ -89,7 +89,7 @@ container is named `nyansa-ollama` whatever the hardware profile.
 | n8n | `n8nio/n8n:2.40.7` | Workflow engine and AI agent orchestration |
 | Ollama | `ollama/ollama:0.34.4` (`-rocm` for AMD) | Local LLM and embedding inference |
 | Qdrant | `qdrant/qdrant:v1.19.1` | Vector store |
-| PostgreSQL | `postgres:16.15-alpine` | n8n persistence |
+| PostgreSQL | `postgres:17.11-alpine` | n8n persistence |
 | Open WebUI | `ghcr.io/open-webui/open-webui:v0.7.2` | Browser chat interface for Ollama |
 | Caddy | `caddy:2.11.4-alpine` | Reverse proxy, automatic HTTPS |
 | Tailscale | `tailscale/tailscale:v1.102.5` | Private access (tailscale profile) |

@@ -112,7 +112,7 @@ x-init-ollama: &init-ollama
 
 services:
   nyansa-postgres:
-    image: postgres:${POSTGRES_VERSION:-16.15-alpine}
+    image: postgres:${POSTGRES_VERSION:-17.11-alpine}
     hostname: nyansa-postgres
     container_name: nyansa-postgres
     networks: ['nyansa']
