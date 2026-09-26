@@ -36,12 +36,21 @@ x-n8n: &service-n8n
     - DB_POSTGRESDB_HOST=nyansa-postgres
     - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
     - DB_POSTGRESDB_USER=${POSTGRES_USER}
-    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     - N8N_DIAGNOSTICS_ENABLED=false
     - N8N_PERSONALIZATION_ENABLED=false
-    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
-    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET}
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set N8N_USER_MANAGEMENT_JWT_SECRET in .env}
     - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    # Behind the reverse proxy: public URLs, one trusted proxy hop and
+    # cookies sent over HTTPS only (browsers also accept them on localhost).
+    - N8N_EDITOR_BASE_URL=${N8N_PUBLIC_URL:-http://localhost:5678}/
+    - WEBHOOK_URL=${N8N_PUBLIC_URL:-http://localhost:5678}/
+    - N8N_PROXY_HOPS=1
+    - N8N_SECURE_COOKIE=true
+    # Workflows cannot read the container environment (and its secrets).
+    - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
+    - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
     # Injects the Qdrant API key into every credential of type qdrantApi at
     # runtime. The key lives only in .env; rotating it needs a restart only.
     - 'CREDENTIALS_OVERWRITE_DATA={"qdrantApi":{"apiKey":"${QDRANT_API_KEY}"}}'
@@ -110,9 +119,9 @@ services:
     networks: ['nyansa']
     restart: unless-stopped
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-      - POSTGRES_DB
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - nyansa_postgres_storage:/var/lib/postgresql/data
     healthcheck:
@@ -176,7 +185,7 @@ services:
     # No published port: clients use nyansa-qdrant:6333 on the internal network.
     # Every request except the health endpoints needs the API key.
     environment:
-      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}
     volumes:
       - nyansa_qdrant_storage:/qdrant/storage
     healthcheck:
@@ -199,6 +208,23 @@ services:
       - 127.0.0.1:3000:8080
     environment:
       - OLLAMA_BASE_URL=http://nyansa-ollama:11434
+      - WEBUI_URL=${WEBUI_PUBLIC_URL:-http://localhost:3000}
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
+      - CORS_ALLOW_ORIGIN=${WEBUI_PUBLIC_URL:-http://localhost:3000}
+      - WEBUI_SESSION_COOKIE_SECURE=true
+      - WEBUI_AUTH_COOKIE_SECURE=true
+      # No public sign-up. The admin account is created on first start from
+      # these variables, only when the user table is empty, so there is no
+      # window where a stranger could register first.
+      - ENABLE_SIGNUP=false
+      - WEBUI_ADMIN_NAME=${WEBUI_ADMIN_NAME:-Admin}
+      - WEBUI_ADMIN_EMAIL=${WEBUI_ADMIN_EMAIL:-}
+      - WEBUI_ADMIN_PASSWORD=${WEBUI_ADMIN_PASSWORD:-}
+      # Local models only; no calls to external APIs or analytics.
+      - ENABLE_OPENAI_API=false
+      - ANONYMIZED_TELEMETRY=false
+      - SCARF_NO_ANALYTICS=true
+      - DO_NOT_TRACK=true
     volumes:
       - nyansa_openwebui_storage:/app/backend/data
     healthcheck:
