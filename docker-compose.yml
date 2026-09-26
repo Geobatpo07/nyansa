@@ -19,7 +19,7 @@ networks:
     name: nyansa
 
 x-n8n: &service-n8n
-  image: n8nio/n8n:latest
+  image: n8nio/n8n:${N8N_VERSION:-2.40.7}
   networks: ['nyansa']
   # Only the variables n8n needs. The whole .env is never injected, so proxy
   # and Tailscale secrets stay out of the n8n container.
@@ -39,17 +39,22 @@ x-n8n: &service-n8n
     - 'CREDENTIALS_OVERWRITE_DATA={"qdrantApi":{"apiKey":"${QDRANT_API_KEY}"}}'
 
 x-ollama: &service-ollama
-  image: ollama/ollama:latest
+  image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}
   container_name: nyansa-ollama
   networks: ['nyansa']
   restart: unless-stopped
+  healthcheck:
+    test: ['CMD', 'ollama', 'list']
+    interval: 10s
+    timeout: 5s
+    retries: 10
   # No published port: n8n, Open WebUI and memory-api reach Ollama at
   # nyansa-ollama:11434 on the internal network. Ollama has no authentication.
   volumes:
     - nyansa_ollama_storage:/root/.ollama
 
 x-init-ollama: &init-ollama
-  image: ollama/ollama:latest
+  image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}
   networks: ['nyansa']
   container_name: nyansa-ollama-pull-model
   volumes:
@@ -64,7 +69,7 @@ x-init-ollama: &init-ollama
 
 services:
   nyansa-postgres:
-    image: postgres:16-alpine
+    image: postgres:${POSTGRES_VERSION:-16.15-alpine}
     hostname: nyansa-postgres
     container_name: nyansa-postgres
     networks: ['nyansa']
@@ -119,9 +124,16 @@ services:
         condition: service_healthy
       nyansa-n8n-import:
         condition: service_completed_successfully
+    healthcheck:
+      # The n8n image has neither curl nor wget.
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:5678/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   nyansa-qdrant:
-    image: qdrant/qdrant
+    image: qdrant/qdrant:${QDRANT_VERSION:-v1.19.1}
     hostname: nyansa-qdrant
     container_name: nyansa-qdrant
     networks: ['nyansa']
@@ -132,9 +144,17 @@ services:
       - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
     volumes:
       - nyansa_qdrant_storage:/qdrant/storage
+    healthcheck:
+      # The Qdrant image has no HTTP client; bash's /dev/tcp is enough.
+      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf "GET /readyz HTTP/1.0
+
+" >&3 && grep -q "200 OK" <&3']
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   nyansa-open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION:-v0.7.2}
     hostname: nyansa-open-webui
     container_name: nyansa-open-webui
     networks: ['nyansa']
@@ -146,6 +166,12 @@ services:
       - OLLAMA_BASE_URL=http://nyansa-ollama:11434
     volumes:
       - nyansa_openwebui_storage:/app/backend/data
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:8080/health']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     # Only one Ollama variant runs, depending on the hardware profile.
     depends_on:
       nyansa-ollama-cpu:
@@ -176,7 +202,7 @@ services:
   nyansa-ollama-gpu-amd:
     profiles: ["gpu-amd"]
     <<: *service-ollama
-    image: ollama/ollama:rocm
+    image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}-rocm
     devices:
       - "/dev/kfd"
       - "/dev/dri"
@@ -196,6 +222,6 @@ services:
   nyansa-ollama-pull-model-gpu-amd:
     profiles: ["gpu-amd"]
     <<: *init-ollama
-    image: ollama/ollama:rocm
+    image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}-rocm
     depends_on:
       - nyansa-ollama-gpu-amd
