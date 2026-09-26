@@ -1,235 +1,162 @@
-# Self-hosted AI starter kit
+# Nyansa
 
-**Self-hosted AI Starter Kit** is an open-source Docker Compose template designed to swiftly initialize a comprehensive local AI and low-code development environment.
+[![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Docker Compose](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 
-![n8n.io - Screenshot](https://raw.githubusercontent.com/n8n-io/self-hosted-ai-starter-kit/main/assets/n8n-demo.gif)
+Nyansa is a self-hosted AI "second brain": a Docker Compose stack that runs
+local LLMs, a vector store and a workflow engine next to an Obsidian vault.
+Notes, models and data stay on your own machine. The name comes from the Akan
+word *nyansa*, "wisdom".
 
-Curated by <https://github.com/n8n-io>, it combines the self-hosted n8n
-platform with a curated list of compatible AI products and components to
-quickly get started with building self-hosted AI workflows.
+<!-- DEMO: remplacer par docs/demo.gif (enregistrement de Nyansa répondant à une question à partir du vault Obsidian) -->
 
-> [!TIP]
-> [Read the announcement](https://blog.n8n.io/self-hosted-ai/)
+## Features
 
-### What’s included
+- **One-command stack.** Seven services on a dedicated `nyansa` Docker network,
+  with named volumes for every stateful component.
+- **Local inference with Ollama.** On first start, the stack pulls `qwen2.5:3b`
+  (chat) and `nomic-embed-text` (embeddings). Both are sized for CPU-only
+  machines with limited RAM.
+- **Workflow orchestration with n8n.** State is persisted in PostgreSQL.
+  Credentials and workflows in `n8n/demo-data/` are imported on first boot and
+  skipped if workflows already exist.
+- **Obsidian vault access.** The vault folder set in `OBSIDIAN_VAULT_PATH` is
+  mounted read/write into n8n at `/data/obsidian-vault`.
+- **Vector store.** Qdrant runs in the stack, and an n8n credential for it is
+  provisioned on first boot.
+- **Chat interface.** Open WebUI is connected to Ollama and served on port 3000.
+- **Secrets out of the code.** Database credentials, n8n encryption keys and the
+  vault path are read from `.env`.
 
-✅ [**Self-hosted n8n**](https://n8n.io/) - Low-code platform with over 400
-integrations and advanced AI components
+## Architecture
 
-✅ [**Ollama**](https://ollama.com/) - Cross-platform LLM platform to install
-and run the latest local LLMs
+```mermaid
+flowchart LR
+    vault[("Obsidian vault<br/>host folder")]
+    browser["Browser"]
 
-✅ [**Qdrant**](https://qdrant.tech/) - Open-source, high performance vector
-store with an comprehensive API
+    subgraph stack["Docker network: nyansa"]
+        n8n["nyansa-n8n<br/>workflows and agents"]
+        pg[("nyansa-postgres<br/>n8n state")]
+        qdrant[("nyansa-qdrant<br/>vector store")]
+        ollama["nyansa-ollama<br/>qwen2.5:3b, nomic-embed-text"]
+        pull["nyansa-ollama-pull-model<br/>one-shot model download"]
+        webui["nyansa-open-webui<br/>chat UI"]
+    end
 
-✅ [**PostgreSQL**](https://www.postgresql.org/) -  Workhorse of the Data
-Engineering world, handles large amounts of data safely.
-
-### What you can build
-
-⭐️ **AI Agents** for scheduling appointments
-
-⭐️ **Summarize Company PDFs** securely without data leaks
-
-⭐️ **Smarter Slack Bots** for enhanced company communications and IT operations
-
-⭐️ **Private Financial Document Analysis** at minimal cost
-
-## Installation
-
-### Cloning the Repository
-
-```bash
-git clone https://github.com/n8n-io/self-hosted-ai-starter-kit.git
-cd self-hosted-ai-starter-kit
-cp .env.example .env # you should update secrets and passwords inside
+    vault -- "bind mount /data/obsidian-vault" --> n8n
+    n8n -- "workflow state" --> pg
+    n8n -- "vector store API" --> qdrant
+    n8n -- "chat and embeddings API" --> ollama
+    pull -- "pull models" --> ollama
+    webui -- "chat API" --> ollama
+    browser -- ":5678" --> n8n
+    browser -- ":3000" --> webui
 ```
 
-### Running n8n using Docker Compose
+The Ollama container is named `nyansa-ollama` regardless of the profile used
+to start it. n8n and Open WebUI both reach it at `nyansa-ollama:11434`.
 
-#### For Nvidia GPU users
+## Tech stack
 
-```bash
-git clone https://github.com/n8n-io/self-hosted-ai-starter-kit.git
-cd self-hosted-ai-starter-kit
-cp .env.example .env # you should update secrets and passwords inside
-docker compose --profile gpu-nvidia up
-```
+| Component | Image | Role |
+|---|---|---|
+| n8n | `n8nio/n8n:latest` | Workflow engine and AI agent orchestration |
+| Ollama | `ollama/ollama:latest` (`ollama/ollama:rocm` for AMD) | Local LLM and embedding inference |
+| Qdrant | `qdrant/qdrant` | Vector store |
+| PostgreSQL | `postgres:16-alpine` | n8n persistence |
+| Open WebUI | `ghcr.io/open-webui/open-webui:main` | Browser chat interface for Ollama |
+| `qwen2.5:3b` | Ollama model | Chat model |
+| `nomic-embed-text` | Ollama model | Embedding model |
 
-> [!NOTE]
-> If you have not used your Nvidia GPU with Docker before, please follow the
-> [Ollama Docker instructions](https://docs.ollama.com/docker).
+## Getting started
 
-### For AMD GPU users on Linux
+### Prerequisites
 
-```bash
-git clone https://github.com/n8n-io/self-hosted-ai-starter-kit.git
-cd self-hosted-ai-starter-kit
-cp .env.example .env # you should update secrets and passwords inside
-docker compose --profile gpu-amd up
-```
+- Docker with Docker Compose v2.24 or later (the Compose file uses the
+  `env_file` `path`/`required` syntax).
+- An existing folder for your Obsidian vault.
 
-#### For Mac / Apple Silicon users
-
-If you’re using a Mac with an M1 or newer processor, you can't expose your GPU
-to the Docker instance, unfortunately. There are two options in this case:
-
-1. Run the starter kit fully on CPU, like in the section "For everyone else"
-   below
-2. Run Ollama on your Mac for faster inference, and connect to that from the
-   n8n instance
-
-If you want to run Ollama on your mac, check the
-[Ollama homepage](https://ollama.com/)
-for installation instructions, and run the starter kit as follows:
+### Setup
 
 ```bash
-git clone https://github.com/n8n-io/self-hosted-ai-starter-kit.git
-cd self-hosted-ai-starter-kit
-cp .env.example .env # you should update secrets and passwords inside
-docker compose up
+git clone https://github.com/Geobatpo07/nyansa.git
+cd nyansa
+cp .env.example .env
 ```
 
-##### For Mac users running OLLAMA locally
+Edit `.env` and set at least:
 
-If you're running OLLAMA locally on your Mac (not in Docker), you need to modify the OLLAMA_HOST environment variable
+| Variable | Purpose |
+|---|---|
+| `POSTGRES_PASSWORD` | PostgreSQL password |
+| `N8N_ENCRYPTION_KEY` | Key n8n uses to encrypt stored credentials |
+| `N8N_USER_MANAGEMENT_JWT_SECRET` | Secret for n8n session tokens |
+| `OBSIDIAN_VAULT_PATH` | Absolute path to your vault on the host |
 
-1. Set OLLAMA_HOST to `host.docker.internal:11434` in your .env file. 
-2. Additionally, after you see "Editor is now accessible via: <http://localhost:5678/>":
+To generate a key in PowerShell: `[System.Guid]::NewGuid().ToString()`.
 
-    1. Head to <http://localhost:5678/home/credentials>
-    2. Click on "Local Ollama service"
-    3. Change the base URL to "http://host.docker.internal:11434/"
-
-#### For everyone else
+### Run
 
 ```bash
-git clone https://github.com/n8n-io/self-hosted-ai-starter-kit.git
-cd self-hosted-ai-starter-kit
-cp .env.example .env # you should update secrets and passwords inside
-docker compose --profile cpu up
+docker compose --profile cpu up -d
 ```
 
-## ⚡️ Quick start and usage
-
-The core of the Self-hosted AI Starter Kit is a Docker Compose file, pre-configured with network and storage settings, minimizing the need for additional installations.
-After completing the installation steps above, simply follow the steps below to get started.
-
-1. Open <http://localhost:5678/> in your browser to set up n8n. You’ll only
-   have to do this once.
-2. Open the included workflow:
-   <http://localhost:5678/workflow/srOnR8PAY3u4RSwb>
-3. Click the **Chat** button at the bottom of the canvas, to start running the workflow.
-4. If this is the first time you’re running the workflow, you may need to wait
-   until Ollama finishes downloading Llama3.2. You can inspect the docker
-   console logs to check on the progress.
-
-To open n8n at any time, visit <http://localhost:5678/> in your browser.
-
-With your n8n instance, you’ll have access to over 400 integrations and a
-suite of basic and advanced AI nodes such as
-[AI Agent](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.agent/),
-[Text classifier](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.text-classifier/),
-and [Information Extractor](https://docs.n8n.io/integrations/builtin/cluster-nodes/root-nodes/n8n-nodes-langchain.information-extractor/)
-nodes. To keep everything local, just remember to use the Ollama node for your
-language model and Qdrant as your vector store.
-
-> [!NOTE]
-> This starter kit is designed to help you get started with self-hosted AI
-> workflows. While it’s not fully optimized for production environments, it
-> combines robust components that work well together for proof-of-concept
-> projects. You can customize it to meet your specific needs
-
-## Upgrading
-
-* ### For Nvidia GPU setups:
+The first start downloads both models. To follow progress:
 
 ```bash
-docker compose --profile gpu-nvidia pull
-docker compose create && docker compose --profile gpu-nvidia up
+docker logs -f nyansa-ollama-pull-model
 ```
 
-* ### For Mac / Apple Silicon users
+### Access
 
-```bash
-docker compose pull
-docker compose create && docker compose up
+| Service | URL |
+|---|---|
+| n8n editor | <http://localhost:5678> |
+| Open WebUI | <http://localhost:3000> |
+| Qdrant dashboard | <http://localhost:6333/dashboard> |
+| Ollama API | <http://localhost:11434> |
+
+### GPU profiles
+
+`docker-compose.yml` also defines `gpu-nvidia` and `gpu-amd` profiles. They do
+not start yet: `nyansa-open-webui` depends on `nyansa-ollama-cpu`, which is only
+enabled by the `cpu` profile. Use `--profile cpu` for now.
+
+## Project structure
+
+```text
+.
+├── docker-compose.yml        # Services, volumes, network and cpu / gpu-nvidia / gpu-amd profiles
+├── .env.example              # Template for secrets and the vault path
+├── n8n/
+│   └── demo-data/
+│       ├── credentials/      # n8n credentials (Ollama, Qdrant), imported on first boot
+│       └── workflows/        # n8n workflows, imported on first boot
+├── shared/                   # Host folder mounted at /data/shared in n8n (created on first run)
+├── docs/                     # README assets (demo recording)
+└── LICENSE                   # Apache License 2.0
 ```
 
-* ### For Non-GPU setups:
+## Roadmap
 
-```bash
-docker compose --profile cpu pull
-docker compose create && docker compose --profile cpu up
-```
+- Sync the Obsidian vault with Syncthing. The vault is a local folder for now
+  (see the comment in `.env.example`).
 
-## 👓 Recommended reading
+## Credits
 
-n8n is full of useful content for getting started quickly with its AI concepts
-and nodes. If you run into an issue, go to [support](#support).
+Nyansa started as a fork of the
+[n8n self-hosted AI starter kit](https://github.com/n8n-io/self-hosted-ai-starter-kit),
+released under the Apache License 2.0. The base Compose layout, the first-boot
+import logic and the files in `n8n/demo-data/` come from that project.
 
-- [AI agents for developers: from theory to practice with n8n](https://blog.n8n.io/ai-agents/)
-- [Tutorial: Build an AI workflow in n8n](https://docs.n8n.io/advanced-ai/intro-tutorial/)
-- [Langchain Concepts in n8n](https://docs.n8n.io/advanced-ai/langchain/langchain-n8n/)
-- [Demonstration of key differences between agents and chains](https://docs.n8n.io/advanced-ai/examples/agent-chain-comparison/)
-- [What are vector databases?](https://docs.n8n.io/advanced-ai/examples/understand-vector-databases/)
+Changes made in Nyansa:
 
-## 🎥 Video walkthrough
+- Renamed services, volumes and network under the `nyansa` namespace.
+- Added the Open WebUI service.
+- Mounted the Obsidian vault into n8n.
+- Replaced `llama3.2` with `qwen2.5:3b` and added the `nomic-embed-text`
+  embedding model.
+- Replaced the default secrets in `.env.example`.
 
-- [Installing and using Local AI for n8n](https://www.youtube.com/watch?v=xz_X2N-hPg0)
-
-## 🛍️ More AI templates
-
-For more AI workflow ideas, visit the [**official n8n AI template
-gallery**](https://n8n.io/workflows/categories/ai/). From each workflow,
-select the **Use workflow** button to automatically import the workflow into
-your local n8n instance.
-
-### Learn AI key concepts
-
-- [AI Agent Chat](https://n8n.io/workflows/1954-ai-agent-chat/)
-- [AI chat with any data source (using the n8n workflow too)](https://n8n.io/workflows/2026-ai-chat-with-any-data-source-using-the-n8n-workflow-tool/)
-- [Chat with OpenAI Assistant (by adding a memory)](https://n8n.io/workflows/2098-chat-with-openai-assistant-by-adding-a-memory/)
-- [Use an open-source LLM (via Hugging Face)](https://n8n.io/workflows/1980-use-an-open-source-llm-via-huggingface/)
-- [Chat with PDF docs using AI (quoting sources)](https://n8n.io/workflows/2165-chat-with-pdf-docs-using-ai-quoting-sources/)
-- [AI agent that can scrape webpages](https://n8n.io/workflows/2006-ai-agent-that-can-scrape-webpages/)
-
-### Local AI templates
-
-- [Tax Code Assistant](https://n8n.io/workflows/2341-build-a-tax-code-assistant-with-qdrant-mistralai-and-openai/)
-- [Breakdown Documents into Study Notes with MistralAI and Qdrant](https://n8n.io/workflows/2339-breakdown-documents-into-study-notes-using-templating-mistralai-and-qdrant/)
-- [Financial Documents Assistant using Qdrant and](https://n8n.io/workflows/2335-build-a-financial-documents-assistant-using-qdrant-and-mistralai/) [Mistral.ai](http://mistral.ai/)
-- [Recipe Recommendations with Qdrant and Mistral](https://n8n.io/workflows/2333-recipe-recommendations-with-qdrant-and-mistral/)
-
-## Tips & tricks
-
-### Accessing local files
-
-The self-hosted AI starter kit will create a shared folder (by default,
-located in the same directory) which is mounted to the n8n container and
-allows n8n to access files on disk. This folder within the n8n container is
-located at `/data/shared` -- this is the path you’ll need to use in nodes that
-interact with the local filesystem.
-
-**Nodes that interact with the local filesystem**
-
-- [Read/Write Files from Disk](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.filesreadwrite/)
-- [Local File Trigger](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.localfiletrigger/)
-- [Execute Command](https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.executecommand/)
-
-## 📜 License
-
-This project is licensed under the Apache License 2.0 - see the
-[LICENSE](LICENSE) file for details.
-
-## 💬 Support
-
-Join the conversation in the [n8n Forum](https://community.n8n.io/), where you
-can:
-
-- **Share Your Work**: Show off what you’ve built with n8n and inspire others
-  in the community.
-- **Ask Questions**: Whether you’re just getting started or you’re a seasoned
-  pro, the community and our team are ready to support with any challenges.
-- **Propose Ideas**: Have an idea for a feature or improvement? Let us know!
-  We’re always eager to hear what you’d like to see next.
+This project is distributed under the Apache License 2.0. See [LICENSE](LICENSE).
