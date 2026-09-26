@@ -3,10 +3,10 @@
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Docker Compose](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 
-Nyansa is a self-hosted AI "second brain": a Docker Compose stack that runs
-local LLMs, a vector store and a workflow engine next to an Obsidian vault.
-Notes, models and data stay on your own machine. The name comes from the Akan
-word *nyansa*, "wisdom".
+Nyansa is a self-hosted AI "second brain" built to run on a private server. It
+is a Docker Compose stack of local LLMs, a vector store and a workflow engine,
+wired to an Obsidian vault. Notes, models and data stay on infrastructure you
+control. The name comes from the Akan word *nyansa*, "wisdom".
 
 <!-- DEMO: remplacer par docs/demo.gif (enregistrement de Nyansa répondant à une question à partir du vault Obsidian) -->
 
@@ -69,7 +69,33 @@ to start it. n8n and Open WebUI both reach it at `nyansa-ollama:11434`.
 | `qwen2.5:3b` | Ollama model | Chat model |
 | `nomic-embed-text` | Ollama model | Embedding model |
 
-## Getting started
+## Deployment
+
+The stack targets a single Docker host, such as a private server.
+
+- Long-running services (`nyansa-n8n`, `nyansa-postgres`, `nyansa-qdrant`,
+  `nyansa-open-webui`, Ollama) use `restart: unless-stopped`.
+- All state lives in named volumes. Docker prefixes them with the Compose
+  project name. Back these up together with `.env`:
+
+  | Volume | Content |
+  |---|---|
+  | `nyansa_postgres_storage` | n8n workflows, credentials and executions |
+  | `nyansa_n8n_storage` | n8n local files and binary data |
+  | `nyansa_qdrant_storage` | Qdrant collections |
+  | `nyansa_ollama_storage` | Downloaded models |
+  | `nyansa_openwebui_storage` | Open WebUI users and chat history |
+
+- Keep `N8N_ENCRYPTION_KEY` with the backups. n8n cannot decrypt stored
+  credentials without it.
+- The Compose file publishes ports 5678, 3000, 6333 and 11434 on all host
+  interfaces. It does not include a reverse proxy, TLS or authentication for
+  Qdrant and Ollama. On an internet-facing host, restrict these ports with a
+  firewall and expose the UIs through a reverse proxy or VPN.
+
+<!-- TODO: décrire ici le reverse proxy, HTTPS et l'accès distant (avec your-domain.com comme placeholder) une fois leur configuration ajoutée au dépôt. -->
+
+## Getting started (local)
 
 ### Prerequisites
 
