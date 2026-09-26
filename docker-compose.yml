@@ -34,6 +34,9 @@ x-n8n: &service-n8n
     - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
     - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET}
     - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    # Injects the Qdrant API key into every credential of type qdrantApi at
+    # runtime. The key lives only in .env; rotating it needs a restart only.
+    - 'CREDENTIALS_OVERWRITE_DATA={"qdrantApi":{"apiKey":"${QDRANT_API_KEY}"}}'
 
 x-ollama: &service-ollama
   image: ollama/ollama:latest
@@ -124,6 +127,9 @@ services:
     networks: ['nyansa']
     restart: unless-stopped
     # No published port: clients use nyansa-qdrant:6333 on the internal network.
+    # Every request except the health endpoints needs the API key.
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY}
     volumes:
       - nyansa_qdrant_storage:/qdrant/storage
 
