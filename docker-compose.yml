@@ -189,9 +189,8 @@ services:
       - nyansa_qdrant_storage:/qdrant/storage
     healthcheck:
       # The Qdrant image has no HTTP client; bash's /dev/tcp is enough.
-      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf "GET /readyz HTTP/1.0
-
-" >&3 && grep -q "200 OK" <&3']
+      # printf expands \r\n itself; the YAML string keeps the backslashes.
+      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf ''GET /readyz HTTP/1.0\r\n\r\n'' >&3 && grep -q ''200 OK'' <&3']
       interval: 10s
       timeout: 5s
       retries: 10
