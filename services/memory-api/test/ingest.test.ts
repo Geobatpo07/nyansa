@@ -66,25 +66,45 @@ describe('Ingestor', () => {
     expect(embedder.documentsEmbedded).toBe(embeddedBefore);
   });
 
-  it('reindexes a modified note and drops the chunks it no longer has', async () => {
+  it('reindexes a shortened note and drops the chunks it no longer has', async () => {
     await ingestor.run('incremental');
+    expect(store.points.has(pointId('Alpha.md', 1))).toBe(true);
     await vault.write('Alpha.md', '# Alpha\nShorter now.');
 
     const report = await ingestor.run('incremental');
 
     expect(report.notes).toMatchObject({ indexed: 1, unchanged: 1 });
     expect(store.notes()).toEqual({ 'Alpha.md': 1, 'notes/Beta.md': 1 });
-    expect(store.points.get(pointId('Alpha.md', 0))?.payload.text).toBe('Shorter now.');
+    expect(store.points.get(pointId('Alpha.md', 0))?.payload).toMatchObject({ text: 'Shorter now.', chunk_count: 1 });
+    expect(store.points.has(pointId('Alpha.md', 1))).toBe(false);
   });
 
-  it('removes the points of deleted notes', async () => {
+  it('removes every chunk of a deleted note', async () => {
+    await vault.write('Long.md', `# Long\n${'First part. '.repeat(20)}\n## Two\n${'Second part. '.repeat(20)}`);
     await ingestor.run('incremental');
-    await vault.remove('notes/Beta.md');
+    const longIds = [0, 1, 2].map((i) => pointId('Long.md', i)).filter((id) => store.points.has(id));
+    expect(longIds.length).toBeGreaterThan(1);
+    await vault.remove('Long.md');
 
     const report = await ingestor.run('incremental');
 
-    expect(report.notes).toMatchObject({ scanned: 1, deleted: 1 });
-    expect(store.notes()).toEqual({ 'Alpha.md': 2 });
+    expect(report.notes).toMatchObject({ scanned: 2, deleted: 1 });
+    expect(longIds.some((id) => store.points.has(id))).toBe(false);
+    expect(store.notes()).toEqual({ 'Alpha.md': 2, 'notes/Beta.md': 1 });
+  });
+
+  it('moves a renamed note: old path removed, new path indexed', async () => {
+    await ingestor.run('incremental');
+    const oldIds = [pointId('notes/Beta.md', 0)];
+    await vault.remove('notes/Beta.md');
+    await vault.write('archive/Beta renamed.md', '# Beta\nBeta content #idea');
+
+    const report = await ingestor.run('incremental');
+
+    expect(report.notes).toMatchObject({ indexed: 1, deleted: 1, unchanged: 1 });
+    expect(oldIds.some((id) => store.points.has(id))).toBe(false);
+    expect(store.notes()).toEqual({ 'Alpha.md': 2, 'archive/Beta renamed.md': 1 });
+    expect(store.points.get(pointId('archive/Beta renamed.md', 0))?.payload.path).toBe('archive/Beta renamed.md');
   });
 
   it('reindexes everything in full mode', async () => {
@@ -123,6 +143,9 @@ describe('Ingestor', () => {
 
   it('stops early when the embedding service is down, and resumes on the next run', async () => {
     await ingestor.run('incremental');
+    const alphaHashBefore = (await store.listIndexedNotes()).find((n) => n.path === 'Alpha.md')?.hash;
+    // Sorted before the new notes, so it is among the failed ones.
+    await vault.write('Alpha.md', '# Alpha\nEdited while Ollama is down.');
     for (let i = 0; i < 6; i++) {
       await vault.write(`batch/note-${i}.md`, `# Note ${i}\ncontent ${i}`);
     }
@@ -131,13 +154,21 @@ describe('Ingestor', () => {
 
     const report = await ingestor.run('incremental');
 
-    expect(report.notes).toMatchObject({ indexed: 0, failed: 3, skipped: 3, unchanged: 2 });
-    expect(report.aborted).toBe('3 consecutive failures of ollama; 3 notes skipped, retried on the next run');
+    expect(report.notes).toMatchObject({ indexed: 0, failed: 3, skipped: 4, unchanged: 1 });
+    expect(report.aborted).toBe('3 consecutive failures of ollama; 4 notes skipped, retried on the next run');
+
+    // No hash is recorded for the notes that failed or were skipped: new
+    // notes are absent from the index, the edited note keeps its old hash.
+    const indexed = new Map((await store.listIndexedNotes()).map((n) => [n.path, n.hash]));
+    expect([...indexed.keys()].filter((path) => path.startsWith('batch/'))).toEqual([]);
+    expect(indexed.get('Alpha.md')).toBe(alphaHashBefore);
 
     embedder.embedDocuments = embed;
     const retry = await ingestor.run('incremental');
-    expect(retry.notes).toMatchObject({ indexed: 6, failed: 0, skipped: 0 });
+    expect(retry.notes).toMatchObject({ indexed: 7, failed: 0, skipped: 0, unchanged: 1 });
     expect(retry.aborted).toBeUndefined();
+    expect(store.points.get(pointId('Alpha.md', 0))?.payload.text).toBe('Edited while Ollama is down.');
+    expect(Object.keys(store.notes()).filter((path) => path.startsWith('batch/'))).toHaveLength(6);
   });
 
   it('does not stop on failures specific to each note', async () => {
