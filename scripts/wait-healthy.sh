@@ -3,8 +3,9 @@
 #   - running containers with a healthcheck are "healthy";
 #   - running containers without a healthcheck count as ready;
 #   - one-shot containers (model pull, n8n import) exited with code 0.
-# Fails immediately when a container exits with a non-zero code, and after
-# the timeout when something is still starting, restarting or unhealthy.
+# Fails immediately when a container exits with a non-zero code or is in a
+# crash loop (not ready after CRASH_LOOP_RESTARTS restarts), and after the
+# timeout when something is still starting or unhealthy.
 #
 # Usage: scripts/wait-healthy.sh [timeout-seconds]   (default: 300)
 set -Eeuo pipefail
@@ -13,6 +14,10 @@ set -Eeuo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 timeout=${1:-300}
+# Restarts by the restart policy after which a container that is still not
+# ready is considered broken. Restarts of a container that is ready now
+# (older incidents) are ignored.
+CRASH_LOOP_RESTARTS=3
 require_cmd docker
 
 deadline=$((SECONDS + timeout))
@@ -22,15 +27,25 @@ while :; do
 
 	pending=()
 	failed=()
-	while read -r name state health code; do
+	while read -r name state health code restarts; do
 		name=${name#/}
-		case "$state" in
-		running) [[ "$health" == "-" || "$health" == "healthy" ]] || pending+=("$name ($health)") ;;
-		exited) [[ "$code" == "0" ]] || failed+=("$name (exit code $code)") ;;
-		*) pending+=("$name ($state)") ;;
-		esac
+		if [[ "$state" == "running" && ("$health" == "-" || "$health" == "healthy") ]]; then
+			continue
+		fi
+		if [[ "$state" == "exited" && "$code" == "0" ]]; then
+			continue
+		fi
+		if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+			failed+=("$name (exit code $code)")
+		elif ((restarts >= CRASH_LOOP_RESTARTS)); then
+			failed+=("$name (crash loop: $restarts restarts, last exit code $code)")
+		elif [[ "$health" == "-" ]]; then
+			pending+=("$name ($state)")
+		else
+			pending+=("$name ($health)")
+		fi
 	done < <(docker inspect --format \
-		'{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.ExitCode}}' \
+		'{{.Name}} {{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}-{{end}} {{.State.ExitCode}} {{.RestartCount}}' \
 		"${ids[@]}")
 
 	if ((${#failed[@]} > 0)); then
