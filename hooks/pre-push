@@ -6,7 +6,7 @@
 #      commit's own scripts/build-publish.sh, in a temporary folder.
 # Requires git, docker (CLI only, no daemon) and jq.
 # Bypass in an emergency only: git push --no-verify
-set -Euo pipefail
+set -Eeuo pipefail
 
 remote_name=${1:-remote}
 root=$(git rev-parse --show-toplevel)

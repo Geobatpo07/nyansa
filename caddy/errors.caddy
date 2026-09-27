@@ -1,0 +1,7 @@
+# Error responses (401 from basic_auth, 502 when a backend is down) skip the
+# site's handlers. Give them the same security headers and a plain body.
+# Imported inside a site block.
+handle_errors {
+	import security-headers.caddy
+	respond "{err.status_code} {err.status_text}" {err.status_code}
+}

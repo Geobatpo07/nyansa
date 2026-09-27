@@ -21,11 +21,17 @@ flowchart LR
     dev["Dev machine<br/>git push prod main"] -- "pre-push:<br/>secrets scan + release build" --> bare[("~/nyansa.git<br/>bare repository")]
     bare -- "post-receive" --> build["build-publish.sh<br/>releases/&lt;sha&gt;/"]
     build --> backup["backup.sh"]
-    backup --> up["compose pull + up -d<br/>project nyansa"]
+    backup --> up["compose pull + build + up -d<br/>project nyansa"]
     up --> health{"healthy?"}
     health -- yes --> switch["current -> releases/&lt;sha&gt;<br/>prune old releases"]
-    health -- no --> rollback["restart previous release<br/>current unchanged"]
+    health -- no --> rollback["restart previous release<br/>current unchanged<br/>discard failed release"]
 ```
+
+A container that restarts 3 times without becoming ready is treated as a
+crash loop: the hook rolls back at once instead of waiting for
+`NYANSA_HEALTH_TIMEOUT`. A release that fails (build error, crash, timeout)
+is deleted with its image once the previous release runs again, so the kept
+releases are always working ones. Its deployment log keeps the details.
 
 Server layout:
 
@@ -154,7 +160,7 @@ cd /opt/nyansa/shared
 chmod 600 .env
 
 for key in POSTGRES_PASSWORD N8N_ENCRYPTION_KEY N8N_USER_MANAGEMENT_JWT_SECRET \
-           WEBUI_SECRET_KEY QDRANT_API_KEY WEBUI_ADMIN_PASSWORD; do
+           WEBUI_SECRET_KEY QDRANT_API_KEY MEMORY_API_TOKEN WEBUI_ADMIN_PASSWORD; do
   sed -i "s|^$key=.*|$key=$(openssl rand -hex 32)|" .env
 done
 
@@ -175,6 +181,7 @@ of your access profile (section 5).
 | `N8N_USER_MANAGEMENT_JWT_SECRET` | `openssl rand -hex 32` |
 | `WEBUI_SECRET_KEY` | `openssl rand -hex 32` |
 | `QDRANT_API_KEY` | `openssl rand -hex 32` |
+| `MEMORY_API_TOKEN` | `openssl rand -hex 32` |
 | `WEBUI_ADMIN_PASSWORD` | `openssl rand -hex 32`, or your own password |
 | `N8N_BASIC_AUTH_HASH` (public) | `docker run --rm -it caddy:2.11.4-alpine caddy hash-password` (prompts for the password, so it stays out of shell history) |
 | `TS_AUTHKEY` (tailscale) | Tailscale admin console > Settings > Keys > Generate auth key |
@@ -332,11 +339,11 @@ cd /opt/nyansa/current
 cat RELEASE
 docker ps --filter label=com.docker.compose.project=nyansa --format 'table {{.Names}}\t{{.Status}}'
 scripts/check-exposure.sh                        # exposure rules with the real .env
-sudo ss -tlnp | grep -E ':(80|443|3000|5678|6333|11434)\b'
+sudo ss -tlnp | grep -E ':(80|443|3000|5678|6333|8080|11434)\b'
 ```
 
 `ss` must show 3000 and 5678 on `127.0.0.1` only, 80/443 on all interfaces
-with the public profile, and nothing on 6333 or 11434.
+with the public profile, and nothing on 6333, 8080 or 11434.
 
 Qdrant rejects requests without the key:
 
@@ -362,6 +369,28 @@ curl -s -o /dev/null -w '%{http_code}\n' https://n8n.example.com/webhook/x   # 4
 
 In n8n, open the credential **Local QdrantApi database** and click **Test**.
 It must succeed without typing any key.
+
+memory-api is internal only. Check it and run the first ingestion of the
+vault from a container on the same network:
+
+```bash
+TOKEN=$(grep '^MEMORY_API_TOKEN=' /opt/nyansa/shared/.env | cut -d= -f2)
+docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/health
+# {"status":"ok","checks":{"ollama":"ok","qdrant":"ok"},"ingesting":false}
+docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/ingest \
+  -H "authorization: Bearer $TOKEN"
+docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/search \
+  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"query": "a question about your notes", "limit": 3}'
+```
+
+The first ingestion needs `nomic-embed-text` to be downloaded
+(`docker logs nyansa-ollama-pull-model`). On a CPU-only server it embeds
+about 2 chunks per second: count roughly 15 to 20 minutes per 500 notes.
+The HTTP call stays open until the end; if it is cut, the ingestion still
+finishes in the background (`/health` shows `"ingesting": true`). Later
+incremental runs only process the changed notes. From phase 3, an n8n
+workflow runs it on a schedule.
 
 Finally, take a first manual backup (next section).
 
@@ -443,7 +472,8 @@ if the stack does not become healthy.
 
 | Secret | Procedure |
 |---|---|
-| `QDRANT_API_KEY` | Edit `.env` and redeploy. Qdrant and n8n pick up the new key. |
+| `QDRANT_API_KEY` | Edit `.env` and redeploy. Qdrant, n8n and memory-api pick up the new key. |
+| `MEMORY_API_TOKEN` | Edit `.env` and redeploy; update the clients that call memory-api. |
 | `N8N_BASIC_AUTH_HASH` | Edit `.env` and redeploy. |
 | `WEBUI_SECRET_KEY` | Edit `.env` and redeploy. Every user is logged out. |
 | `POSTGRES_PASSWORD` | Change it in PostgreSQL first (`ALTER USER`), then in `.env`, then redeploy. |

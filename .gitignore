@@ -8,3 +8,6 @@ publish/
 # Local runtime data
 backups/
 shared/
+
+# Local Claude Code settings
+.claude/

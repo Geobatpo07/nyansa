@@ -5,8 +5,9 @@
 #   - only nyansa-caddy-public may publish ports on all interfaces, and only
 #     80 and 443;
 #   - every other published port is bound to 127.0.0.1;
-#   - PostgreSQL, Qdrant and Ollama publish no port at all;
-#   - no container is privileged or uses the host network.
+#   - PostgreSQL, Qdrant, Ollama and memory-api publish no port at all;
+#   - no container is privileged or uses the host network;
+#   - memory-api mounts the vault read-only.
 # Each combination must also pass `docker compose config`.
 #
 # Usage: scripts/check-exposure.sh [--file docker-compose.yml] [--env-file .env]
@@ -48,11 +49,16 @@ read -r -d '' RULES <<'JQ' || true
   | "\($name): port \(.published)->\(.target) is published on \(.host_ip // "all interfaces")"
 ),
 (
-  select(($name | test("^nyansa-(postgres|qdrant|ollama)")) and (($svc.ports // []) | length > 0))
+  select(($name | test("^nyansa-(postgres|qdrant|ollama|memory-api)")) and (($svc.ports // []) | length > 0))
   | "\($name): must not publish any port"
 ),
 ( select($svc.privileged == true) | "\($name): runs privileged" ),
-( select($svc.network_mode == "host") | "\($name): uses the host network" )
+( select($svc.network_mode == "host") | "\($name): uses the host network" ),
+(
+  select($name == "nyansa-memory-api")
+  | ($svc.volumes // [])[] | select(.target == "/vault" and .read_only != true)
+  | "\($name): the vault must be mounted read-only"
+)
 JQ
 
 failures=0

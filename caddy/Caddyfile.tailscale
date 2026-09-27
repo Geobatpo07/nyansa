@@ -7,6 +7,7 @@
 # Open WebUI: https://<TS_HOSTNAME>.<TS_TAILNET>
 {$TS_HOSTNAME}.{$TS_TAILNET} {
 	import security-headers.caddy
+	import errors.caddy
 	encode zstd gzip
 	reverse_proxy nyansa-open-webui:8080
 }
@@ -14,6 +15,7 @@
 # n8n editor: https://<TS_HOSTNAME>.<TS_TAILNET>:8443
 {$TS_HOSTNAME}.{$TS_TAILNET}:8443 {
 	import security-headers.caddy
+	import errors.caddy
 	encode zstd gzip
 	reverse_proxy nyansa-n8n:5678
 }
