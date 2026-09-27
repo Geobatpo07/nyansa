@@ -66,12 +66,13 @@ compose() {
 		"${PROFILE_ARGS[@]}" "$@"
 }
 
-# Starts the previous release again after a failed deployment.
+# Starts the previous release again after a failed deployment. Returns
+# non-zero when there is none or when it does not come back healthy.
 rollback() {
 	local previous=$1
 	if [[ -z "$previous" ]]; then
 		log "no previous release to restore; the stack is left as is for inspection"
-		return
+		return 1
 	fi
 	log "restoring previous release $(basename "$previous")"
 	if compose "$previous" up -d --remove-orphans &&
@@ -79,7 +80,30 @@ rollback() {
 		log "previous release $(basename "$previous") is running again"
 	else
 		log "ROLLBACK FAILED: inspect the stack manually (docs/DEPLOY.md, Rollback)"
+		return 1
 	fi
+}
+
+# Removes a release that failed, with its image, so it does not take the
+# place of a working release among the kept ones. The deployment log and
+# the commit keep the details. The active release is never removed.
+discard_release() {
+	local release=$1 previous=$2 name
+	[[ "$release" != "$previous" ]] || return 0
+	name=$(basename "$release")
+	rm -rf "$release"
+	docker image rm "nyansa-memory-api:${name:0:12}" >/dev/null 2>&1 || true
+	log "failed release ${name:0:12} discarded"
+}
+
+# Failure after the stack was changed: roll back, and discard the failed
+# release only when the previous one is running again.
+fail_after_start() {
+	local release=$1 previous=$2 message=$3
+	if rollback "$previous"; then
+		discard_release "$release" "$previous"
+	fi
+	fail "$message"
 }
 
 # Keeps the newest releases. The active and the previous release are never
@@ -155,27 +179,29 @@ deploy() {
 	ln -sfn "$SHARED_ENV" "$release/.env"
 
 	# 3. Configuration check with the real .env.
-	compose "$release" config -q || fail "docker compose config failed with $SHARED_ENV; the stack was not touched"
+	# Until `up`, a failure leaves the running stack untouched.
+	reject() {
+		discard_release "$release" "$previous"
+		fail "$1; the stack was not touched"
+	}
+	compose "$release" config -q || reject "docker compose config failed with $SHARED_ENV"
 
 	# 4. Backup of the current state before any change.
-	BACKUP_DIR=$NYANSA_ROOT/backups bash "$release/scripts/backup.sh" ||
-		fail "backup failed; the stack was not touched"
+	BACKUP_DIR=$NYANSA_ROOT/backups bash "$release/scripts/backup.sh" || reject "backup failed"
 
 	# 5. Pull and build images, then start the new release. From here on, a
 	# failure restores the previous release.
-	compose "$release" pull --quiet --ignore-buildable || fail "image pull failed; the stack was not touched"
-	compose "$release" build || fail "image build failed; the stack was not touched"
+	compose "$release" pull --quiet --ignore-buildable || reject "image pull failed"
+	compose "$release" build || reject "image build failed"
 
 	if ! compose "$release" up -d --remove-orphans; then
-		rollback "$previous"
-		fail "docker compose up failed for $short"
+		fail_after_start "$release" "$previous" "docker compose up failed for $short"
 	fi
 
 	# 6. Wait for a healthy stack.
 	if ! bash "$release/scripts/wait-healthy.sh" "$HEALTH_TIMEOUT"; then
 		compose "$release" ps -a || true
-		rollback "$previous"
-		fail "$short did not become healthy"
+		fail_after_start "$release" "$previous" "$short did not become healthy"
 	fi
 
 	# 7. Switch atomically, then prune.

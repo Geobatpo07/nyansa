@@ -38,7 +38,7 @@ while :; do
 		if [[ "$state" == "exited" || "$state" == "dead" ]]; then
 			failed+=("$name (exit code $code)")
 		elif ((restarts >= CRASH_LOOP_RESTARTS)); then
-			failed+=("$name (crash loop: $restarts restarts, last exit code $code)")
+			failed+=("$name (crash loop: $restarts restarts)")
 		elif [[ "$health" == "-" ]]; then
 			pending+=("$name ($state)")
 		else
