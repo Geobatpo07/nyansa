@@ -1,0 +1,19 @@
+# Access profile "tailscale": no public port. Caddy shares the network
+# namespace of the nyansa-tailscale container, so it is only reachable from
+# devices on the tailnet. Certificates for *.ts.net are issued by the local
+# tailscaled through its socket (MagicDNS and HTTPS must be enabled on the
+# tailnet). A tailnet node has a single name, so n8n uses port 8443.
+
+# Open WebUI: https://<TS_HOSTNAME>.<TS_TAILNET>
+{$TS_HOSTNAME}.{$TS_TAILNET} {
+	import security-headers.caddy
+	encode zstd gzip
+	reverse_proxy nyansa-open-webui:8080
+}
+
+# n8n editor: https://<TS_HOSTNAME>.<TS_TAILNET>:8443
+{$TS_HOSTNAME}.{$TS_TAILNET}:8443 {
+	import security-headers.caddy
+	encode zstd gzip
+	reverse_proxy nyansa-n8n:5678
+}

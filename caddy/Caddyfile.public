@@ -1,0 +1,28 @@
+# Access profile "public": Open WebUI and the n8n editor on the public
+# internet, with Let's Encrypt certificates. Every other service stays on the
+# internal Docker network. Values come from .env through the container env.
+{
+	email {$ACME_EMAIL}
+}
+
+{$WEBUI_DOMAIN} {
+	import security-headers.caddy
+	encode zstd gzip
+	# Open WebUI has its own login; public sign-up is disabled in compose.
+	reverse_proxy nyansa-open-webui:8080
+}
+
+{$N8N_DOMAIN} {
+	import security-headers.caddy
+	encode zstd gzip
+
+	# Webhooks are called by external services and carry their own auth
+	# (configured per workflow). Everything else, including the editor and
+	# its API, sits behind HTTP basic auth on top of the n8n login.
+	@protected not path /webhook/* /webhook-test/* /webhook-waiting/*
+	basic_auth @protected {
+		{$N8N_BASIC_AUTH_USER} {$N8N_BASIC_AUTH_HASH}
+	}
+
+	reverse_proxy nyansa-n8n:5678
+}

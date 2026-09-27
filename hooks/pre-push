@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Development-side guard, enabled with scripts/install-hooks.sh
+# (git config core.hooksPath hooks). For every commit being pushed:
+#   1. refuses tracked .env files and secrets (scripts/check-secrets.sh);
+#   2. builds and validates a release from that exact commit with the
+#      commit's own scripts/build-publish.sh, in a temporary folder.
+# Requires git, docker (CLI only, no daemon) and jq.
+# Bypass in an emergency only: git push --no-verify
+set -Euo pipefail
+
+remote_name=${1:-remote}
+root=$(git rev-parse --show-toplevel)
+
+check_commit() {
+	local sha=$1 ref=$2 work status=0
+	echo "pre-push: checking $ref (${sha:0:12}) for $remote_name"
+
+	bash "$root/scripts/check-secrets.sh" "$sha" || return 1
+
+	if ! git cat-file -e "$sha:scripts/build-publish.sh" 2>/dev/null; then
+		echo "pre-push: ${sha:0:12} has no scripts/build-publish.sh; release check skipped"
+		return 0
+	fi
+
+	work=$(mktemp -d)
+	git archive "$sha" scripts | tar -x -C "$work"
+	bash "$work/scripts/build-publish.sh" --output "$work/publish" "$sha" || status=1
+	rm -rf "$work"
+	return "$status"
+}
+
+failed=0
+while read -r local_ref local_sha _remote_ref _remote_sha; do
+	# Branch or tag deletion: nothing to check.
+	[[ "$local_sha" =~ ^0+$ ]] && continue
+	check_commit "$local_sha" "$local_ref" || failed=1
+done
+
+if ((failed)); then
+	echo "pre-push: push refused. Fix the errors above (or, in an emergency, use --no-verify)." >&2
+	exit 1
+fi

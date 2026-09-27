@@ -1,42 +1,103 @@
+# The project name is fixed so that every release directory on the server
+# drives the same containers and volumes.
+name: nyansa
+
 volumes:
   nyansa_n8n_storage:
+    name: nyansa_n8n_storage
   nyansa_postgres_storage:
+    name: nyansa_postgres_storage
   nyansa_ollama_storage:
+    name: nyansa_ollama_storage
   nyansa_qdrant_storage:
+    name: nyansa_qdrant_storage
   nyansa_openwebui_storage:
+    name: nyansa_openwebui_storage
+  nyansa_caddy_data:
+    name: nyansa_caddy_data
+  nyansa_caddy_config:
+    name: nyansa_caddy_config
+  nyansa_tailscale_state:
+    name: nyansa_tailscale_state
+  nyansa_tailscale_socket:
+    name: nyansa_tailscale_socket
 
 networks:
   nyansa:
+    name: nyansa
 
 x-n8n: &service-n8n
-  image: n8nio/n8n:latest
+  image: n8nio/n8n:${N8N_VERSION:-2.40.7}
   networks: ['nyansa']
+  # Only the variables n8n needs. The whole .env is never injected, so proxy
+  # and Tailscale secrets stay out of the n8n container.
   environment:
     - DB_TYPE=postgresdb
     - DB_POSTGRESDB_HOST=nyansa-postgres
+    - DB_POSTGRESDB_DATABASE=${POSTGRES_DB}
     - DB_POSTGRESDB_USER=${POSTGRES_USER}
-    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD}
+    - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
     - N8N_DIAGNOSTICS_ENABLED=false
     - N8N_PERSONALIZATION_ENABLED=false
-    - N8N_ENCRYPTION_KEY
-    - N8N_USER_MANAGEMENT_JWT_SECRET
-    - OLLAMA_HOST=${OLLAMA_HOST:-nyansa-ollama:11434}
-  env_file:
-    - path: .env
-      required: true
+    - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:?set N8N_ENCRYPTION_KEY in .env}
+    - N8N_USER_MANAGEMENT_JWT_SECRET=${N8N_USER_MANAGEMENT_JWT_SECRET:?set N8N_USER_MANAGEMENT_JWT_SECRET in .env}
+    - N8N_DEFAULT_BINARY_DATA_MODE=filesystem
+    # Behind the reverse proxy: public URLs, one trusted proxy hop and
+    # cookies sent over HTTPS only (browsers also accept them on localhost).
+    - N8N_EDITOR_BASE_URL=${N8N_PUBLIC_URL:-http://localhost:5678}/
+    - WEBHOOK_URL=${N8N_PUBLIC_URL:-http://localhost:5678}/
+    - N8N_PROXY_HOPS=1
+    - N8N_SECURE_COOKIE=true
+    # Workflows cannot read the container environment (and its secrets).
+    - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
+    - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
+    # Injects the Qdrant API key into every credential of type qdrantApi at
+    # runtime. The key lives only in .env; rotating it needs a restart only.
+    - 'CREDENTIALS_OVERWRITE_DATA={"qdrantApi":{"apiKey":"${QDRANT_API_KEY}"}}'
+
+x-caddy: &service-caddy
+  image: caddy:${CADDY_VERSION:-2.11.4-alpine}
+  restart: unless-stopped
+  # The whole caddy/ folder is mounted so both Caddyfiles can import the
+  # shared snippets; each profile selects its own Caddyfile.
+  working_dir: /etc/caddy
+  environment:
+    - ACME_EMAIL=${ACME_EMAIL:-}
+    - WEBUI_DOMAIN=${WEBUI_DOMAIN:-}
+    - N8N_DOMAIN=${N8N_DOMAIN:-}
+    - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER:-}
+    - N8N_BASIC_AUTH_HASH=${N8N_BASIC_AUTH_HASH:-}
+    - TS_HOSTNAME=${TS_HOSTNAME:-}
+    - TS_TAILNET=${TS_TAILNET:-}
+  healthcheck:
+    # Admin API, only reachable from inside the container's network namespace.
+    test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:2019/config/']
+    interval: 10s
+    timeout: 5s
+    retries: 10
+  depends_on:
+    nyansa-n8n:
+      condition: service_started
+    nyansa-open-webui:
+      condition: service_started
 
 x-ollama: &service-ollama
-  image: ollama/ollama:latest
+  image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}
   container_name: nyansa-ollama
   networks: ['nyansa']
   restart: unless-stopped
-  ports:
-    - 11434:11434
+  healthcheck:
+    test: ['CMD', 'ollama', 'list']
+    interval: 10s
+    timeout: 5s
+    retries: 10
+  # No published port: n8n, Open WebUI and memory-api reach Ollama at
+  # nyansa-ollama:11434 on the internal network. Ollama has no authentication.
   volumes:
     - nyansa_ollama_storage:/root/.ollama
 
 x-init-ollama: &init-ollama
-  image: ollama/ollama:latest
+  image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}
   networks: ['nyansa']
   container_name: nyansa-ollama-pull-model
   volumes:
@@ -51,15 +112,15 @@ x-init-ollama: &init-ollama
 
 services:
   nyansa-postgres:
-    image: postgres:16-alpine
+    image: postgres:${POSTGRES_VERSION:-17.11-alpine}
     hostname: nyansa-postgres
     container_name: nyansa-postgres
     networks: ['nyansa']
     restart: unless-stopped
     environment:
-      - POSTGRES_USER
-      - POSTGRES_PASSWORD
-      - POSTGRES_DB
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      - POSTGRES_DB=${POSTGRES_DB}
     volumes:
       - nyansa_postgres_storage:/var/lib/postgresql/data
     healthcheck:
@@ -76,14 +137,15 @@ services:
     command:
       - "-c"
       - |
-        if [ -z "$(n8n list:workflow --onlyId)" ]; then
+        # n8n also prints log lines on stdout: count only workflow IDs.
+        if ! n8n list:workflow --onlyId 2>/dev/null | grep -Eq '^[A-Za-z0-9]{16}$$'; then
           n8n import:credentials --separate --input=/demo-data/credentials && \
           n8n import:workflow --separate --input=/demo-data/workflows
         else
           echo "Workflows exist, skipping import"
         fi
     volumes:
-      - ./n8n/demo-data:/demo-data
+      - ./n8n/demo-data:/demo-data:ro
     depends_on:
       nyansa-postgres:
         condition: service_healthy
@@ -93,12 +155,12 @@ services:
     hostname: nyansa-n8n
     container_name: nyansa-n8n
     restart: unless-stopped
+    # Loopback only: reachable through the reverse proxy or an SSH tunnel.
     ports:
-      - 5678:5678
+      - 127.0.0.1:5678:5678
     volumes:
       - nyansa_n8n_storage:/home/node/.n8n
-      - ./n8n/demo-data:/demo-data
-      - ./shared:/data/shared
+      - ${NYANSA_FILES_PATH:-./shared}:/data/shared
       # Vault Obsidian synchronisé par Syncthing, monté en lecture/écriture
       - ${OBSIDIAN_VAULT_PATH}:/data/obsidian-vault
     depends_on:
@@ -106,32 +168,81 @@ services:
         condition: service_healthy
       nyansa-n8n-import:
         condition: service_completed_successfully
+    healthcheck:
+      # The n8n image has neither curl nor wget.
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:5678/healthz').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   nyansa-qdrant:
-    image: qdrant/qdrant
+    image: qdrant/qdrant:${QDRANT_VERSION:-v1.19.1}
     hostname: nyansa-qdrant
     container_name: nyansa-qdrant
     networks: ['nyansa']
     restart: unless-stopped
-    ports:
-      - 6333:6333
+    # No published port: clients use nyansa-qdrant:6333 on the internal network.
+    # Every request except the health endpoints needs the API key.
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:?set QDRANT_API_KEY in .env}
     volumes:
       - nyansa_qdrant_storage:/qdrant/storage
+    healthcheck:
+      # The Qdrant image has no HTTP client; bash's /dev/tcp is enough.
+      # printf expands \r\n itself; the YAML string keeps the backslashes.
+      test: ['CMD', 'bash', '-c', 'exec 3<>/dev/tcp/127.0.0.1/6333 && printf ''GET /readyz HTTP/1.0\r\n\r\n'' >&3 && grep -q ''200 OK'' <&3']
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   nyansa-open-webui:
-    image: ghcr.io/open-webui/open-webui:main
+    image: ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION:-v0.7.2}
     hostname: nyansa-open-webui
     container_name: nyansa-open-webui
     networks: ['nyansa']
     restart: unless-stopped
+    # Loopback only: reachable through the reverse proxy or an SSH tunnel.
     ports:
-      - 3000:8080
+      - 127.0.0.1:3000:8080
     environment:
       - OLLAMA_BASE_URL=http://nyansa-ollama:11434
+      - WEBUI_URL=${WEBUI_PUBLIC_URL:-http://localhost:3000}
+      - WEBUI_SECRET_KEY=${WEBUI_SECRET_KEY:?set WEBUI_SECRET_KEY in .env}
+      - CORS_ALLOW_ORIGIN=${WEBUI_PUBLIC_URL:-http://localhost:3000}
+      - WEBUI_SESSION_COOKIE_SECURE=true
+      - WEBUI_AUTH_COOKIE_SECURE=true
+      # No public sign-up. The admin account is created on first start from
+      # these variables, only when the user table is empty, so there is no
+      # window where a stranger could register first.
+      - ENABLE_SIGNUP=false
+      - WEBUI_ADMIN_NAME=${WEBUI_ADMIN_NAME:-Admin}
+      - WEBUI_ADMIN_EMAIL=${WEBUI_ADMIN_EMAIL:-}
+      - WEBUI_ADMIN_PASSWORD=${WEBUI_ADMIN_PASSWORD:-}
+      # Local models only; no calls to external APIs or analytics.
+      - ENABLE_OPENAI_API=false
+      - ANONYMIZED_TELEMETRY=false
+      - SCARF_NO_ANALYTICS=true
+      - DO_NOT_TRACK=true
     volumes:
       - nyansa_openwebui_storage:/app/backend/data
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:8080/health']
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    # Only one Ollama variant runs, depending on the hardware profile.
     depends_on:
-      - nyansa-ollama-cpu
+      nyansa-ollama-cpu:
+        condition: service_started
+        required: false
+      nyansa-ollama-gpu:
+        condition: service_started
+        required: false
+      nyansa-ollama-gpu-amd:
+        condition: service_started
+        required: false
 
   nyansa-ollama-cpu:
     profiles: ["cpu"]
@@ -151,7 +262,7 @@ services:
   nyansa-ollama-gpu-amd:
     profiles: ["gpu-amd"]
     <<: *service-ollama
-    image: ollama/ollama:rocm
+    image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}-rocm
     devices:
       - "/dev/kfd"
       - "/dev/dri"
@@ -171,6 +282,80 @@ services:
   nyansa-ollama-pull-model-gpu-amd:
     profiles: ["gpu-amd"]
     <<: *init-ollama
-    image: ollama/ollama:rocm
+    image: ollama/ollama:${OLLAMA_VERSION:-0.34.4}-rocm
     depends_on:
       - nyansa-ollama-gpu-amd
+
+  # ---------------------------------------------------------------------------
+  # Access profiles: enable exactly one of "public" or "tailscale".
+  # ---------------------------------------------------------------------------
+
+  # Public HTTPS on ports 80/443 with Let's Encrypt. The only service allowed
+  # to publish ports on all interfaces.
+  nyansa-caddy-public:
+    profiles: ["public"]
+    <<: *service-caddy
+    container_name: nyansa-caddy-public
+    networks: ['nyansa']
+    ports:
+      - 80:80
+      - 443:443
+      - 443:443/udp
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile.public', '--adapter', 'caddyfile']
+    volumes:
+      - nyansa_caddy_data:/data
+      - nyansa_caddy_config:/config
+      - ./caddy:/etc/caddy:ro
+
+  # Private access over Tailscale: no port published on the host. Caddy joins
+  # this container's network namespace and serves HTTPS on the tailnet only.
+  nyansa-tailscale:
+    profiles: ["tailscale"]
+    image: tailscale/tailscale:${TAILSCALE_VERSION:-v1.102.5}
+    container_name: nyansa-tailscale
+    hostname: ${TS_HOSTNAME:-nyansa}
+    networks: ['nyansa']
+    restart: unless-stopped
+    environment:
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_HOSTNAME=${TS_HOSTNAME:-nyansa}
+      # The auth key is only used for the first login; the node identity is
+      # then kept in the state volume.
+      - TS_AUTH_ONCE=true
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SOCKET=/var/run/tailscale/tailscaled.sock
+      - TS_USERSPACE=false
+      - TS_ENABLE_HEALTH_CHECK=true
+      - TS_LOCAL_ADDR_PORT=127.0.0.1:9002
+    volumes:
+      - nyansa_tailscale_state:/var/lib/tailscale
+      - nyansa_tailscale_socket:/var/run/tailscale
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:9002/healthz']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  nyansa-caddy-tailscale:
+    profiles: ["tailscale"]
+    <<: *service-caddy
+    container_name: nyansa-caddy-tailscale
+    network_mode: service:nyansa-tailscale
+    command: ['caddy', 'run', '--config', '/etc/caddy/Caddyfile.tailscale', '--adapter', 'caddyfile']
+    volumes:
+      - nyansa_caddy_data:/data
+      - nyansa_caddy_config:/config
+      - ./caddy:/etc/caddy:ro
+      # tailscaled socket, used by Caddy to get the *.ts.net certificate.
+      - nyansa_tailscale_socket:/var/run/tailscale
+    depends_on:
+      nyansa-tailscale:
+        condition: service_healthy
+      nyansa-n8n:
+        condition: service_started
+      nyansa-open-webui:
+        condition: service_started
