@@ -149,7 +149,9 @@ Production runs from immutable release folders, never from a working tree:
    configuration, takes a backup, pulls images and starts the stack.
 3. Once every container is healthy, `/opt/nyansa/current` points to the new
    release and old releases are pruned (5 kept by default). On failure,
-   `current` is unchanged and the previous release is started again.
+   `current` is unchanged, the previous release is started again and the
+   failed release is discarded. A crash loop is detected after 3 restarts,
+   without waiting for the timeout.
 
 [docs/DEPLOY.md](docs/DEPLOY.md) is the full from-scratch guide: server
 preparation, secret generation, public or Tailscale access, firewall, first

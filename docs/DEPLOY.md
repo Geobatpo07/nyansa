@@ -21,11 +21,17 @@ flowchart LR
     dev["Dev machine<br/>git push prod main"] -- "pre-push:<br/>secrets scan + release build" --> bare[("~/nyansa.git<br/>bare repository")]
     bare -- "post-receive" --> build["build-publish.sh<br/>releases/&lt;sha&gt;/"]
     build --> backup["backup.sh"]
-    backup --> up["compose pull + up -d<br/>project nyansa"]
+    backup --> up["compose pull + build + up -d<br/>project nyansa"]
     up --> health{"healthy?"}
     health -- yes --> switch["current -> releases/&lt;sha&gt;<br/>prune old releases"]
-    health -- no --> rollback["restart previous release<br/>current unchanged"]
+    health -- no --> rollback["restart previous release<br/>current unchanged<br/>discard failed release"]
 ```
+
+A container that restarts 3 times without becoming ready is treated as a
+crash loop: the hook rolls back at once instead of waiting for
+`NYANSA_HEALTH_TIMEOUT`. A release that fails (build error, crash, timeout)
+is deleted with its image once the previous release runs again, so the kept
+releases are always working ones. Its deployment log keeps the details.
 
 Server layout:
 
@@ -379,8 +385,12 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/sear
 ```
 
 The first ingestion needs `nomic-embed-text` to be downloaded
-(`docker logs nyansa-ollama-pull-model`). From phase 3, an n8n workflow
-runs it on a schedule.
+(`docker logs nyansa-ollama-pull-model`). On a CPU-only server it embeds
+about 2 chunks per second: count roughly 15 to 20 minutes per 500 notes.
+The HTTP call stays open until the end; if it is cut, the ingestion still
+finishes in the background (`/health` shows `"ingesting": true`). Later
+incremental runs only process the changed notes. From phase 3, an n8n
+workflow runs it on a schedule.
 
 Finally, take a first manual backup (next section).
 
