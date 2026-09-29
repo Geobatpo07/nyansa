@@ -238,6 +238,7 @@ if missing); the shell checks need bash, Docker and jq.
 (cd services/memory-api && uv sync && uv run pytest && uv run ruff check . && uv run mypy)
 scripts/check-exposure.sh --env-file .env.example   # port exposure, 9 profile combinations
 scripts/check-secrets.sh HEAD                       # tracked secrets
+scripts/tests/check-secrets.test.sh                 # secrets scanner tests (throwaway Git repo)
 scripts/build-publish.sh HEAD                       # build and validate ./publish
 ```
 
@@ -258,6 +259,7 @@ scripts/build-publish.sh HEAD                       # build and validate ./publi
 │   ├── backup.sh / restore.sh        # Backups of the database and volumes
 │   ├── check-exposure.sh             # Port exposure rules for every profile combination
 │   ├── check-secrets.sh              # Refuses tracked secrets
+│   ├── tests/                        # Tests of the scripts (check-secrets)
 │   ├── build-publish.sh              # Builds a release folder from a commit
 │   ├── wait-healthy.sh               # Waits for a healthy stack
 │   └── install-hooks.sh              # Installs the Git hooks
