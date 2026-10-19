@@ -8,3 +8,6 @@ caddy/* text eol=lf
 *.json text eol=lf
 .env* text eol=lf
 *.gif binary
+
+# Note fixtures must keep their exact bytes (hashes are compared).
+services/memory-api/tests/golden/vault/** -text
