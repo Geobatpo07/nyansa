@@ -1,12 +1,13 @@
 # memory-api
 
-TypeScript service that turns the Obsidian vault into a searchable memory:
+Python service that turns the Obsidian vault into a searchable memory:
 it parses the notes, splits them along their headings, embeds the chunks with
 `nomic-embed-text` (Ollama) and stores them in Qdrant with their metadata.
 `/search` returns the most relevant chunks with the note they come from, so
 answers can cite their sources.
 
-Node.js 24, Fastify 5, Zod 4, strict TypeScript, Vitest.
+Python 3.14, asyncio, FastAPI, Pydantic, httpx; pytest, ruff, mypy (strict);
+dependencies locked with uv.
 
 ## API
 
@@ -82,29 +83,29 @@ host, expect about 2 chunks per second (a 500-note vault of 2,250 chunks took
 }
 ```
 
-Errors: `400` invalid body, `401` missing or wrong token, `502` Ollama or
-Qdrant failure.
+Errors: `400` invalid body, `401` missing or wrong token, `413` body over
+64 KiB, `502` Ollama or Qdrant failure.
 
 ## How it works
 
 ```mermaid
 flowchart LR
-    vault[("Vault<br/>/vault read-only")] --> scan["listNotes<br/>+ SHA-256"]
-    scan --> plan["planIngest<br/>(pure)"]
+    vault[("Vault<br/>/vault read-only")] --> scan["list_notes<br/>+ SHA-256"]
+    scan --> plan["plan_ingest<br/>(pure)"]
     qdrantState[("Qdrant<br/>index state")] --> plan
-    plan -- "new / changed" --> parse["parseNote<br/>frontmatter, tags, wikilinks"]
-    parse --> chunk["chunkNote<br/>heading-aware"]
+    plan -- "new / changed" --> parse["parse_note<br/>frontmatter, tags, wikilinks"]
+    parse --> chunk["chunk_note<br/>heading-aware"]
     chunk --> embed["OllamaEmbedder<br/>search_document:"]
     embed --> upsert["upsert chunks<br/>then delete stale tail"]
     plan -- "deleted" --> delete["delete note points"]
 ```
 
-- **Parsing** (`src/markdown/parse.ts`): YAML frontmatter; title from
+- **Parsing** (`src/memory_api/markdown.py`): YAML frontmatter; title from
   `title:`, the first H1, or the file name; tags from the frontmatter and
   inline `#tags`, lower-cased; `[[target#heading|alias]]` and `![[embeds]]`.
   Fenced code and inline code are ignored. Invalid YAML is reported, not
   fatal.
-- **Chunking** (`src/markdown/chunk.ts`): one section per ATX heading, with
+- **Chunking** (same module): one section per ATX heading, with
   its heading path (`Setup > Docker`). Paragraphs are packed up to
   `CHUNK_MAX_CHARS` (1500); a code block is never split unless it exceeds the
   limit alone; oversized blocks are split by lines, sentences, then
@@ -121,9 +122,11 @@ flowchart LR
 - **Incremental state** lives in Qdrant itself (first chunk of each note), so
   there is no second database to keep in sync. `index_version` changes with
   the embedding model or chunk size, which reindexes everything.
-- **Architecture**: the ingestion and search logic depend on two interfaces
-  (`Embedder`, `VectorStore` in `src/ports.ts`). `OllamaEmbedder` and
-  `QdrantStore` implement them; tests use in-memory fakes.
+- **Architecture**: the ingestion and search logic depend on two protocols
+  (`Embedder`, `VectorStore` in `src/memory_api/domain.py`). `OllamaEmbedder`
+  and `QdrantStore` (`clients.py`) implement them over one shared httpx
+  client; tests use in-memory fakes. The vault is read in a worker thread so
+  `/health` keeps answering during an ingestion.
 
 ## Configuration
 
@@ -138,7 +141,7 @@ flowchart LR
 | `CHUNK_MAX_CHARS` | `1500` | 200 to 8000; changing it reindexes all notes |
 | `VAULT_PATH` | `/vault` | Mounted read-only |
 | `MEMORY_API_PORT` | `8080` | |
-| `LOG_LEVEL` | `info` | pino levels |
+| `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
 The vector size is read from the model at the first ingestion. A collection
 created with another size is refused with an explicit error.
@@ -147,15 +150,23 @@ created with another size is refused with an explicit error.
 
 ```bash
 cd services/memory-api
-npm ci
-npm test            # Vitest: parsing, chunking, incremental logic, adapters, API
-npm run typecheck
-npm run build       # dist/
+uv sync                     # .venv with the locked dependencies
+uv run pytest               # parsing, chunking, incremental logic, adapters, API
+uv run ruff check . && uv run ruff format --check .
+uv run mypy                 # strict
+uv run python -m memory_api # needs the variables below
 ```
 
-Tests never call Ollama or Qdrant: the adapters are tested against a stubbed
-`fetch`, and the ingestion and API tests use in-memory fakes with a temporary
-vault on disk.
+Tests never call Ollama or Qdrant: the adapters are tested against
+`httpx.MockTransport`, and the ingestion and API tests use in-memory fakes
+with a temporary vault on disk. `tests/test_qdrant_integration.py` runs
+against a real Qdrant when `QDRANT_TEST_URL` is set (see the file).
+
+The service was first written in TypeScript. `tests/golden` holds notes and
+the values that implementation computed for them (point ids, `index_version`,
+hashes, titles, tags, links, chunks); `tests/test_golden.py` requires the same
+values, so an index built before the port stays valid and nothing is
+reindexed.
 
 Calling the running service from the Docker network (with `MEMORY_API_TOKEN`
 from `.env`):

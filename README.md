@@ -22,7 +22,7 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
   skipped if workflows already exist.
 - **Obsidian vault access.** The vault folder set in `OBSIDIAN_VAULT_PATH` is
   mounted read/write into n8n at `/data/obsidian-vault`.
-- **RAG over the vault (`memory-api`).** A TypeScript service parses the notes
+- **RAG over the vault (`memory-api`).** A Python service parses the notes
   (frontmatter, tags, `[[wikilinks]]`), splits them along their headings,
   embeds them with `nomic-embed-text` and stores them in Qdrant with their
   path, title, tags, section and content hash. Indexing is incremental: only
@@ -66,7 +66,7 @@ flowchart LR
             qdrant[("nyansa-qdrant<br/>vector store, API key")]
             ollama["nyansa-ollama<br/>qwen2.5:3b, nomic-embed-text"]
             pull["nyansa-ollama-pull-model<br/>one-shot model download"]
-            memory["nyansa-memory-api<br/>TypeScript RAG service<br/>/ingest, /search"]
+            memory["nyansa-memory-api<br/>Python RAG service<br/>/ingest, /search"]
         end
     end
 
@@ -104,7 +104,7 @@ container is named `nyansa-ollama` whatever the hardware profile.
 | Open WebUI | `ghcr.io/open-webui/open-webui:v0.7.2` | Browser chat interface for Ollama |
 | Caddy | `caddy:2.11.4-alpine` | Reverse proxy, automatic HTTPS |
 | Tailscale | `tailscale/tailscale:v1.102.5` | Private access (tailscale profile) |
-| memory-api | built from `services/memory-api` (Node.js 24, Fastify, TypeScript) | Vault ingestion and semantic search |
+| memory-api | built from `services/memory-api` (Python 3.14, FastAPI, asyncio) | Vault ingestion and semantic search |
 | `qwen2.5:3b` | Ollama model | Chat model |
 | `nomic-embed-text` | Ollama model | Embedding model |
 
@@ -231,8 +231,11 @@ docker run --rm --network nyansa -p 127.0.0.1:6333:6333 alpine/socat:1.8.1.3 \
 
 ### Tests and checks
 
+The memory-api checks need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14
+if missing); the shell checks need bash, Docker and jq.
+
 ```bash
-cd services/memory-api && npm ci && npm test && npm run typecheck && cd ../..
+(cd services/memory-api && uv sync && uv run pytest && uv run ruff check . && uv run mypy)
 scripts/check-exposure.sh --env-file .env.example   # port exposure, 9 profile combinations
 scripts/check-secrets.sh HEAD                       # tracked secrets
 scripts/build-publish.sh HEAD                       # build and validate ./publish
@@ -246,7 +249,7 @@ scripts/build-publish.sh HEAD                       # build and validate ./publi
 ├── .env.example              # Template for secrets, URLs, profiles and paths
 ├── caddy/                    # Caddyfiles for the public and tailscale profiles
 ├── services/
-│   └── memory-api/           # TypeScript RAG service: parsing, chunking, ingestion, search (+ Vitest)
+│   └── memory-api/           # Python RAG service: parsing, chunking, ingestion, search (+ pytest)
 ├── n8n/
 │   └── demo-data/
 │       ├── credentials/      # n8n credentials (Ollama, Qdrant), no secret, imported on first boot
