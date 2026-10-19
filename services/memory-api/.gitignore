@@ -1,3 +1,5 @@
-node_modules/
-dist/
-coverage/
+.venv/
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

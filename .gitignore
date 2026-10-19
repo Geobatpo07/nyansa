@@ -11,3 +11,6 @@ shared/
 
 # Local Claude Code settings
 .claude/
+
+# Local editor settings
+.vscode/

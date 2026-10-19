@@ -1,0 +1,313 @@
+{
+ "index_version": "c962a50f516e",
+ "max_chars": 1500,
+ "notes": [
+  {
+   "path": "bom.md",
+   "hash": "bf55f895e12d90c7547129815f74e870335ca6facae34b90f4cf29f703189c88",
+   "encoding": "utf-8",
+   "title": "BOM note",
+   "tags": [],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "bb15000a-42bf-560c-82a1-ac4c191aa6d2",
+     "section": "BOM note",
+     "text": "Starts with a byte order mark.",
+     "embedding_text": "BOM note > BOM note\n\nStarts with a byte order mark."
+    }
+   ]
+  },
+  {
+   "path": "broken.md",
+   "hash": "88e678c2a38716a26d7fb322db44b45db6e3c483063aa92ebe0400fcf5c87b3a",
+   "encoding": "utf-8",
+   "title": "Still here #tag",
+   "tags": [
+    "tag"
+   ],
+   "links": [],
+   "frontmatter_error": true,
+   "chunks": [
+    {
+     "id": "f7897cfd-1920-51cb-9346-0f11543d280d",
+     "section": "Still here #tag",
+     "text": "Body.",
+     "embedding_text": "Still here #tag > Still here #tag\n\nBody."
+    }
+   ]
+  },
+  {
+   "path": "Café/Été 2026.md",
+   "hash": "e524bc142108833a30058d5c5d139344ee7ef30e5c7c0994a68fae1a51f0cb97",
+   "encoding": "utf-8",
+   "title": "Été",
+   "tags": [
+    "voyage/canada"
+   ],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "79155057-edf8-594b-b23e-1bd713af4f29",
+     "section": "Été",
+     "text": "Notes de vacances à Montréal 🚀, #voyage/canada.",
+     "embedding_text": "Été > Été\n\nNotes de vacances à Montréal 🚀, #voyage/canada."
+    },
+    {
+     "id": "a716db89-f528-5acd-9209-eb131b1d7186",
+     "section": "Été > Budget",
+     "text": "5 € par jour.",
+     "embedding_text": "Été > Été > Budget\n\n5 € par jour."
+    }
+   ]
+  },
+  {
+   "path": "crlf.md",
+   "hash": "afebe94bc5b20b592bec11ad18da483cc9d011c1321598db8b09878def278658",
+   "encoding": "utf-8",
+   "title": "crlf",
+   "tags": [
+    "windows"
+   ],
+   "links": [
+    {
+     "target": "Link",
+     "embed": false
+    }
+   ],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "c80d971e-d298-5066-a2f4-1999967f055f",
+     "section": "",
+     "text": "Line one\n[[Link]]",
+     "embedding_text": "crlf\n\nLine one\n[[Link]]"
+    },
+    {
+     "id": "ccd2d9cc-9ef2-5454-ba78-efbad379dbf4",
+     "section": "Section",
+     "text": "Line two",
+     "embedding_text": "crlf > Section\n\nLine two"
+    }
+   ]
+  },
+  {
+   "path": "Docker.md",
+   "hash": "1ef632b84d2f4e863a638caa0723907ac95fa6b4f44fb928512596ffc733fc06",
+   "encoding": "utf-8",
+   "title": "Docker setup",
+   "tags": [
+    "homelab",
+    "infra",
+    "self-hosted"
+   ],
+   "links": [
+    {
+     "target": "Tailscale",
+     "embed": false
+    },
+    {
+     "target": "Caddy",
+     "embed": false,
+     "heading": "TLS",
+     "alias": "the proxy"
+    },
+    {
+     "target": "backup.png",
+     "embed": true
+    }
+   ],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "3a557931-7ba0-5aec-b7c5-f16e7f6b38df",
+     "section": "",
+     "text": "Intro with #homelab and [[Tailscale]].",
+     "embedding_text": "Docker setup\n\nIntro with #homelab and [[Tailscale]]."
+    },
+    {
+     "id": "4d91ed5c-aef2-5dd7-9af9-d609c3a22ae2",
+     "section": "Setup",
+     "text": "Install Docker.",
+     "embedding_text": "Docker setup > Setup\n\nInstall Docker."
+    },
+    {
+     "id": "852b06b8-74ea-5e32-9f23-ef8f2970817b",
+     "section": "Setup > Compose",
+     "text": "Run `docker compose up` with profiles. See [[Caddy#TLS|the proxy]].\n\n```bash\n# not a heading\ndocker compose --profile cpu up -d\n```",
+     "embedding_text": "Docker setup > Setup > Compose\n\nRun `docker compose up` with profiles. See [[Caddy#TLS|the proxy]].\n\n```bash\n# not a heading\ndocker compose --profile cpu up -d\n```"
+    },
+    {
+     "id": "a4c513d0-a27e-5acc-a716-fc2817535204",
+     "section": "Setup > Backups",
+     "text": "Nightly, see ![[backup.png]].",
+     "embedding_text": "Docker setup > Setup > Backups\n\nNightly, see ![[backup.png]]."
+    }
+   ]
+  },
+  {
+   "path": "empty.md",
+   "hash": "1ee7eea2c47462b34ee214c016afd453a12dcfa64a7c3ae3be440ecdb7734646",
+   "encoding": "utf-8",
+   "title": "empty",
+   "tags": [],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "601cbc2e-a0b6-56e6-a5e5-c55d4b8685ba",
+     "section": "",
+     "text": "empty",
+     "embedding_text": "empty\n\nempty"
+    }
+   ]
+  },
+  {
+   "path": "headings.md",
+   "hash": "9b9616a0cbb8182b2cdd5fa4c98d7306368489c28325f5bd7b1416a14ecba1c4",
+   "encoding": "utf-8",
+   "title": "A",
+   "tags": [],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "664d64a0-8d98-5bec-af53-630f0533171c",
+     "section": "A > A3",
+     "text": "text",
+     "embedding_text": "A > A > A3\n\ntext"
+    },
+    {
+     "id": "bfbf1ac4-95f1-5988-90f1-120b6b221aee",
+     "section": "A > B2",
+     "text": "text",
+     "embedding_text": "A > A > B2\n\ntext"
+    },
+    {
+     "id": "c8179c2c-4615-54a6-afb0-4613604fbc3b",
+     "section": "C",
+     "text": "```\nunclosed fence\n",
+     "embedding_text": "A > C\n\n```\nunclosed fence\n"
+    }
+   ]
+  },
+  {
+   "path": "latin1.md",
+   "hash": "0853236abd6e221804e354a5a3ff3c272a05702fce8176be2c0be5a44b31b094",
+   "encoding": "windows-1252",
+   "title": "Résumé",
+   "tags": [],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "710e451b-7996-5e3a-8dd5-cf5112900b9c",
+     "section": "Résumé",
+     "text": "Café – 5 € par tasse.",
+     "embedding_text": "Résumé > Résumé\n\nCafé – 5 € par tasse."
+    }
+   ]
+  },
+  {
+   "path": "Long.md",
+   "hash": "8ebf3b33535067fb9afc458f55b7670456fca3b44850dfb4c059f30f489a60ee",
+   "encoding": "utf-8",
+   "title": "Long",
+   "tags": [],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "13f8ea54-a595-5cc9-83a8-30745f151e85",
+     "section": "Long",
+     "text": "Sentence number 0 has quite a few words in it. Sentence number 1 has quite a few words in it. Sentence number 2 has quite a few words in it. Sentence number 3 has quite a few words in it. Sentence number 4 has quite a few words in it. Sentence number 5 has quite a few words in it. Sentence number 6 has quite a few words in it. Sentence number 7 has quite a few words in it. Sentence number 8 has quite a few words in it. Sentence number 9 has quite a few words in it. Sentence number 10 has quite a few words in it. Sentence number 11 has quite a few words in it. Sentence number 12 has quite a few words in it. Sentence number 13 has quite a few words in it. Sentence number 14 has quite a few words in it. Sentence number 15 has quite a few words in it. Sentence number 16 has quite a few words in it. Sentence number 17 has quite a few words in it. Sentence number 18 has quite a few words in it. Sentence number 19 has quite a few words in it. Sentence number 20 has quite a few words in it. Sentence number 21 has quite a few words in it. Sentence number 22 has quite a few words in it. Sentence number 23 has quite a few words in it. Sentence number 24 has quite a few words in it. Sentence number 25 has quite a few words in it. Sentence number 26 has quite a few words in it. Sentence number 27 has quite a few words in it. Sentence number 28 has quite a few words in it. Sentence number 29 has quite a few words in it. Sentence number 30 has quite a few words in it.",
+     "embedding_text": "Long > Long\n\nSentence number 0 has quite a few words in it. Sentence number 1 has quite a few words in it. Sentence number 2 has quite a few words in it. Sentence number 3 has quite a few words in it. Sentence number 4 has quite a few words in it. Sentence number 5 has quite a few words in it. Sentence number 6 has quite a few words in it. Sentence number 7 has quite a few words in it. Sentence number 8 has quite a few words in it. Sentence number 9 has quite a few words in it. Sentence number 10 has quite a few words in it. Sentence number 11 has quite a few words in it. Sentence number 12 has quite a few words in it. Sentence number 13 has quite a few words in it. Sentence number 14 has quite a few words in it. Sentence number 15 has quite a few words in it. Sentence number 16 has quite a few words in it. Sentence number 17 has quite a few words in it. Sentence number 18 has quite a few words in it. Sentence number 19 has quite a few words in it. Sentence number 20 has quite a few words in it. Sentence number 21 has quite a few words in it. Sentence number 22 has quite a few words in it. Sentence number 23 has quite a few words in it. Sentence number 24 has quite a few words in it. Sentence number 25 has quite a few words in it. Sentence number 26 has quite a few words in it. Sentence number 27 has quite a few words in it. Sentence number 28 has quite a few words in it. Sentence number 29 has quite a few words in it. Sentence number 30 has quite a few words in it."
+    },
+    {
+     "id": "b4afe43d-b6e3-5bbc-a322-32dd86ccab4d",
+     "section": "Long",
+     "text": "Sentence number 31 has quite a few words in it. Sentence number 32 has quite a few words in it. Sentence number 33 has quite a few words in it. Sentence number 34 has quite a few words in it. Sentence number 35 has quite a few words in it. Sentence number 36 has quite a few words in it. Sentence number 37 has quite a few words in it. Sentence number 38 has quite a few words in it. Sentence number 39 has quite a few words in it.",
+     "embedding_text": "Long > Long\n\nSentence number 31 has quite a few words in it. Sentence number 32 has quite a few words in it. Sentence number 33 has quite a few words in it. Sentence number 34 has quite a few words in it. Sentence number 35 has quite a few words in it. Sentence number 36 has quite a few words in it. Sentence number 37 has quite a few words in it. Sentence number 38 has quite a few words in it. Sentence number 39 has quite a few words in it."
+    },
+    {
+     "id": "71fad746-ccad-5274-b046-493f93be2481",
+     "section": "Long",
+     "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "embedding_text": "Long > Long\n\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+     "id": "0d3dc1cf-f3ad-50bc-af21-5a8f21ff226f",
+     "section": "Long",
+     "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "embedding_text": "Long > Long\n\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+     "id": "03f3dbcf-7fee-575e-881a-c056f3af5c24",
+     "section": "Long",
+     "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "embedding_text": "Long > Long\n\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    },
+    {
+     "id": "9eecb935-dde2-5825-83cc-8a84422eb69f",
+     "section": "Long > Tail",
+     "text": "End.",
+     "embedding_text": "Long > Long > Tail\n\nEnd."
+    }
+   ]
+  },
+  {
+   "path": "Paragraphs.md",
+   "hash": "9d4c4e1d98f8afda75bd71385aeb1ec9ee55ddba913b5ff5adc8686bdc0d20b5",
+   "encoding": "utf-8",
+   "title": "Paragraphs",
+   "tags": [],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "428fd848-246b-591d-ae27-b6f82e84644b",
+     "section": "",
+     "text": "Paragraph 0. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 1. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 2. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 3. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+     "embedding_text": "Paragraphs\n\nParagraph 0. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 1. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 2. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 3. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    },
+    {
+     "id": "b0c0b469-6884-5a86-8a80-4aa83c1a135b",
+     "section": "",
+     "text": "Paragraph 4. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 5. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 6. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 7. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+     "embedding_text": "Paragraphs\n\nParagraph 4. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 5. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 6. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 7. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    },
+    {
+     "id": "f1e4842f-f732-5f83-a2a8-8397d9dd0574",
+     "section": "",
+     "text": "Paragraph 8. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 9. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 10. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 11. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word",
+     "embedding_text": "Paragraphs\n\nParagraph 8. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 9. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 10. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word\n\nParagraph 11. word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word word"
+    }
+   ]
+  },
+  {
+   "path": "tags.md",
+   "hash": "9dda8a2ac01d9299336527d10a8a31d84acea274c19f887e370fe9b73e6d4a47",
+   "encoding": "utf-8",
+   "title": "tags",
+   "tags": [
+    "alpha",
+    "beta",
+    "gamma",
+    "tag_two",
+    "tag-one"
+   ],
+   "links": [],
+   "frontmatter_error": false,
+   "chunks": [
+    {
+     "id": "20bc9dbb-601c-55ee-9bb3-e0bc89ce5067",
+     "section": "",
+     "text": "Issue #42, https://example.com/page#anchor, `#code`, real #Tag-One and #tag_two.",
+     "embedding_text": "tags\n\nIssue #42, https://example.com/page#anchor, `#code`, real #Tag-One and #tag_two."
+    }
+   ]
+  }
+ ]
+}

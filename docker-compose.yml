@@ -273,7 +273,8 @@ services:
       - ${OBSIDIAN_VAULT_PATH}:/vault:ro
     healthcheck:
       # /health checks Ollama and Qdrant too.
-      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:8080/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      # urlopen raises on 503, so the check fails while a dependency is down.
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=4)"]
       interval: 15s
       timeout: 5s
       retries: 10

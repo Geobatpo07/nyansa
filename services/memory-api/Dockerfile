@@ -1,21 +1,28 @@
-# Build stage: compile TypeScript, then keep production dependencies only.
-ARG NODE_IMAGE=node:24.21.0-alpine3.24
+# Build stage: the locked dependencies into a virtualenv, and the sources.
+ARG PYTHON_IMAGE=python:3.14.7-slim-trixie
 
-FROM ${NODE_IMAGE} AS build
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --ignore-scripts --no-audit --no-fund
-COPY tsconfig.json tsconfig.build.json ./
-COPY src ./src
-RUN npm run build && npm prune --omit=dev
+FROM ghcr.io/astral-sh/uv:0.12.3 AS uv
 
-# Runtime stage: compiled JavaScript and production dependencies, non-root.
-FROM ${NODE_IMAGE}
-ENV NODE_ENV=production
+FROM ${PYTHON_IMAGE} AS build
+COPY --from=uv /uv /usr/local/bin/uv
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_PROJECT_ENVIRONMENT=/app/.venv
+WORKDIR /src
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
+COPY src /app/src
+RUN python -m compileall -q /app/src
+
+# Runtime stage: Python, the virtualenv and the sources (no uv), non-root.
+# The bytecode is compiled at build time: the root filesystem is read-only.
+FROM ${PYTHON_IMAGE}
+ENV PATH=/app/.venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+COPY --from=build /app /app
 WORKDIR /app
-COPY --from=build /app/package.json ./
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-USER node
+USER 65532:65532
 EXPOSE 8080
-CMD ["node", "dist/index.js"]
+CMD ["python", "-m", "src.main"]
