@@ -33,10 +33,8 @@ RUNTIME_PATHS=(
 	scripts/wait-healthy.sh
 	services/memory-api/Dockerfile
 	services/memory-api/.dockerignore
-	services/memory-api/package.json
-	services/memory-api/package-lock.json
-	services/memory-api/tsconfig.json
-	services/memory-api/tsconfig.build.json
+	services/memory-api/pyproject.toml
+	services/memory-api/uv.lock
 	services/memory-api/src
 )
 

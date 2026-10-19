@@ -1,6 +1,7 @@
-node_modules
-dist
-coverage
-test
+.venv
+tests
 *.md
-vitest.config.ts
+.pytest_cache
+.mypy_cache
+.ruff_cache
+**/__pycache__
