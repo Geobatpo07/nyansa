@@ -22,7 +22,7 @@ ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 COPY --from=build /app /app
-WORKDIR /app/src
+WORKDIR /app
 USER 65532:65532
 EXPOSE 8080
-CMD ["python", "main.py"]
+CMD ["python", "-m", "src.main"]

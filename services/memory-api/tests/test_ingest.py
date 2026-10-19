@@ -5,9 +5,9 @@ from typing import ClassVar
 
 import pytest
 
-from domain import IndexedNote, UpstreamError
-from fakes import FakeEmbedder, InMemoryStore, Vault
-from ingest import IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
+from src.domain import IndexedNote, UpstreamError
+from src.ingest import IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
+from tests.fakes import FakeEmbedder, InMemoryStore, Vault
 
 
 class TestPlanIngest:

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from domain import ChunkPoint, IndexedNote, SearchHit
+from src.domain import ChunkPoint, IndexedNote, SearchHit
 
 DIMENSIONS = 64
 

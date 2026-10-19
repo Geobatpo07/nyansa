@@ -1,4 +1,4 @@
-"""Entry point: `python main.py` (from src/)."""
+"""Entry point: `python -m src.main`."""
 
 import asyncio
 import logging
@@ -8,10 +8,10 @@ import sys
 import httpx
 import uvicorn
 
-from app import build_app
-from clients import OllamaEmbedder, QdrantStore
-from config import load_config
-from ingest import Ingestor
+from .app import build_app
+from .clients import OllamaEmbedder, QdrantStore
+from .config import load_config
+from .ingest import Ingestor
 
 _LOG_LEVELS = {
     "fatal": logging.CRITICAL,

@@ -5,7 +5,7 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
-from domain import ChunkPoint, IndexedNote, SearchHit, Service, UpstreamError
+from .domain import ChunkPoint, IndexedNote, SearchHit, Service, UpstreamError
 
 # Fields of the payload indexed by Qdrant for filtering.
 _PAYLOAD_INDEXES = {"path": "keyword", "tags": "keyword", "chunk_index": "integer"}

@@ -6,7 +6,7 @@ from pathlib import PurePosixPath
 
 import yaml
 
-from domain import Chunk, ParsedNote, WikiLink
+from .domain import Chunk, ParsedNote, WikiLink
 
 _FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 _HEADING = re.compile(r" {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*")

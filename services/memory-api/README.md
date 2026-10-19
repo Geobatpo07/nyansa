@@ -154,7 +154,7 @@ uv sync                     # .venv with the locked dependencies
 uv run pytest               # parsing, chunking, incremental logic, adapters, API
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                 # strict
-uv run python src/main.py   # needs the variables below
+uv run python -m src.main   # needs the variables below
 ```
 
 Tests never call Ollama or Qdrant: the adapters are tested against

@@ -1,7 +1,7 @@
 import pytest
 
-from domain import WikiLink
-from markdown import chunk_note, parse_note, parse_wikilink, split_frontmatter
+from src.domain import WikiLink
+from src.markdown import chunk_note, parse_note, parse_wikilink, split_frontmatter
 
 
 class TestSplitFrontmatter:
