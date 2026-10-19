@@ -11,11 +11,11 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from fakes import FakeEmbedder, Vault
 
-from memory_api.clients import QdrantStore
-from memory_api.domain import UpstreamError
-from memory_api.ingest import Ingestor, point_id
+from clients import QdrantStore
+from domain import UpstreamError
+from fakes import FakeEmbedder, Vault
+from ingest import Ingestor, point_id
 
 URL = os.environ.get("QDRANT_TEST_URL")
 API_KEY = os.environ.get("QDRANT_TEST_API_KEY", "")

@@ -1,8 +1,7 @@
 import re
 
 from fakes import Vault
-
-from memory_api.vault import decode, list_notes, read_note
+from vault import decode, list_notes, read_note
 
 
 def test_decode_reads_utf8_and_drops_the_byte_order_mark() -> None:

@@ -20,21 +20,21 @@ dev = [
     "types-pyyaml==6.0.12.20260906",
 ]
 
-[build-system]
-requires = ["uv_build>=0.12.3,<0.13"]
-build-backend = "uv_build"
-
-[tool.uv.build-backend]
-module-name = "memory_api"
+# A service, not a library: uv installs the dependencies only, and the
+# modules are run from src/.
+[tool.uv]
+package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["src"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
 line-length = 120
 target-version = "py314"
+src = ["src", "tests"]
 extend-exclude = ["tests/golden/vault"]  # note fixtures, some deliberately not UTF-8
 
 [tool.ruff.lint]
@@ -48,3 +48,4 @@ ignore = ["RUF001", "RUF002", "RUF003"]  # accented and typographic characters a
 [tool.mypy]
 strict = true
 files = ["src", "tests"]
+mypy_path = "src"

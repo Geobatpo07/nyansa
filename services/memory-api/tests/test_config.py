@@ -1,6 +1,6 @@
 import pytest
 
-from memory_api.config import load_config
+from config import load_config
 
 REQUIRED = {"MEMORY_API_TOKEN": "a" * 32, "QDRANT_API_KEY": "key"}
 

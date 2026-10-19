@@ -1,7 +1,7 @@
 import pytest
 
-from memory_api.domain import WikiLink
-from memory_api.markdown import chunk_note, parse_note, parse_wikilink, split_frontmatter
+from domain import WikiLink
+from markdown import chunk_note, parse_note, parse_wikilink, split_frontmatter
 
 
 class TestSplitFrontmatter:

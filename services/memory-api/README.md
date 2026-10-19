@@ -100,7 +100,7 @@ flowchart LR
     plan -- "deleted" --> delete["delete note points"]
 ```
 
-- **Parsing** (`src/memory_api/markdown.py`): YAML frontmatter; title from
+- **Parsing** (`src/markdown.py`): YAML frontmatter; title from
   `title:`, the first H1, or the file name; tags from the frontmatter and
   inline `#tags`, lower-cased; `[[target#heading|alias]]` and `![[embeds]]`.
   Fenced code and inline code are ignored. Invalid YAML is reported, not
@@ -123,7 +123,7 @@ flowchart LR
   there is no second database to keep in sync. `index_version` changes with
   the embedding model or chunk size, which reindexes everything.
 - **Architecture**: the ingestion and search logic depend on two protocols
-  (`Embedder`, `VectorStore` in `src/memory_api/domain.py`). `OllamaEmbedder`
+  (`Embedder`, `VectorStore` in `src/domain.py`). `OllamaEmbedder`
   and `QdrantStore` (`clients.py`) implement them over one shared httpx
   client; tests use in-memory fakes. The vault is read in a worker thread so
   `/health` keeps answering during an ingestion.
@@ -154,7 +154,7 @@ uv sync                     # .venv with the locked dependencies
 uv run pytest               # parsing, chunking, incremental logic, adapters, API
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                 # strict
-uv run python -m memory_api # needs the variables below
+uv run python src/main.py   # needs the variables below
 ```
 
 Tests never call Ollama or Qdrant: the adapters are tested against

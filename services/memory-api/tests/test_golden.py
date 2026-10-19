@@ -12,9 +12,9 @@ from typing import Any
 
 import pytest
 
-from memory_api.ingest import CHUNKER_VERSION, embedding_text, point_id
-from memory_api.markdown import chunk_note, parse_note
-from memory_api.vault import read_vault, sha256
+from ingest import CHUNKER_VERSION, embedding_text, point_id
+from markdown import chunk_note, parse_note
+from vault import read_vault, sha256
 
 GOLDEN = Path(__file__).parent / "golden"
 EXPECTED: dict[str, Any] = json.loads((GOLDEN / "golden.json").read_text(encoding="utf-8"))

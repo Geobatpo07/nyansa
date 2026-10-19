@@ -10,8 +10,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from .domain import Embedder, UpstreamError, VectorStore
-from .ingest import IngestInProgressError, Ingestor, IngestReport
+from domain import Embedder, UpstreamError, VectorStore
+from ingest import IngestInProgressError, Ingestor, IngestReport
 
 MAX_BODY_BYTES = 64 * 1024
 

@@ -3,11 +3,11 @@ from collections.abc import AsyncIterator
 
 import httpx
 import pytest
-from fakes import FakeEmbedder, InMemoryStore, Vault
 
-from memory_api.app import build_app
-from memory_api.domain import UpstreamError
-from memory_api.ingest import Ingestor
+from app import build_app
+from domain import UpstreamError
+from fakes import FakeEmbedder, InMemoryStore, Vault
+from ingest import Ingestor
 
 TOKEN = "t" * 32
 AUTH = {"authorization": f"Bearer {TOKEN}"}

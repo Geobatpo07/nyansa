@@ -10,9 +10,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
-from .domain import ChunkPayload, ChunkPoint, Embedder, IndexedNote, UpstreamError, VectorStore
-from .markdown import chunk_note, parse_note
-from .vault import read_vault, sha256
+from domain import ChunkPayload, ChunkPoint, Embedder, IndexedNote, UpstreamError, VectorStore
+from markdown import chunk_note, parse_note
+from vault import read_vault, sha256
 
 type IngestMode = Literal["full", "incremental"]
 

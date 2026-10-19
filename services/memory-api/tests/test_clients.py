@@ -7,8 +7,8 @@ from typing import Any
 import httpx
 import pytest
 
-from memory_api.clients import OllamaEmbedder, QdrantStore
-from memory_api.domain import IndexedNote, SearchHit, UpstreamError
+from clients import OllamaEmbedder, QdrantStore
+from domain import IndexedNote, SearchHit, UpstreamError
 
 type Reply = tuple[int, object]
 

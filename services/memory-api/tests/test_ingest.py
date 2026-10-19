@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 from typing import ClassVar
 
 import pytest
-from fakes import FakeEmbedder, InMemoryStore, Vault
 
-from memory_api.domain import IndexedNote, UpstreamError
-from memory_api.ingest import IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
+from domain import IndexedNote, UpstreamError
+from fakes import FakeEmbedder, InMemoryStore, Vault
+from ingest import IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
 
 
 class TestPlanIngest:
