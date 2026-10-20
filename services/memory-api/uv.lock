@@ -201,6 +201,22 @@ wheels = [
 ]
 
 [[package]]
+name = "ladybug"
+version = "0.21.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/d4/8729df38bd6970d4d1db22a01675ad7a7d08beaf77fe8e2000a1055524e4/ladybug-0.21.2.tar.gz", hash = "sha256:ad36aeea40044fa93f2c2c9c23b23f449b5af46d178158143f7f02660b8045a5", size = 10550956, upload-time = "2026-10-01T22:27:23.454Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d7/07/0325df4dd5922958f9022a496e1856c91bd866b0bc2d3e9c3dc33eed2646/ladybug-0.21.2-cp314-cp314-macosx_15_0_arm64.whl", hash = "sha256:79fe6cd17556a8d91b9e63b7f6de27662ee510e10d98db638a9a661615a9b0e6", size = 5522882, upload-time = "2026-10-01T22:27:05.842Z" },
+    { url = "https://files.pythonhosted.org/packages/0a/30/74297d05858cb2bb30e31f65f19c725e8e2ed002784fd2c61bb17e5c6e8f/ladybug-0.21.2-cp314-cp314-macosx_15_0_x86_64.whl", hash = "sha256:c0a0cb6ce0f8ffa2a407b0adbe83523421b37f061cf8205fa93fc9d70bb167b9", size = 5804187, upload-time = "2026-10-01T22:27:07.616Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/65/8f76a48bdec5e453fbefdfa7235a3940ab651f931e57e1eb4fcc5d05caff/ladybug-0.21.2-cp314-cp314-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:140478a6ab9eb917669ba4eb27d6d073588724bb4cb9db4ecb12e22ee989bc84", size = 8772567, upload-time = "2026-10-01T22:27:09.673Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/ec/3e1ff372a6ba89c9bb6437e780f083907549f422c8391fa3a8bc1bb48209/ladybug-0.21.2-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:ebb32c2e14922f7613063c2a915f8f61e11fc106c7382273e7573a83cb89f0a9", size = 9721423, upload-time = "2026-10-01T22:27:11.986Z" },
+    { url = "https://files.pythonhosted.org/packages/7c/f3/16af1468bf1245d28353667b503c18f8da01a7bd3a98b302be079d74259d/ladybug-0.21.2-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:7921c1160b96792e1190a6350b0e8e3eee093cb6a93c81d71cc63085194956f4", size = 9587368, upload-time = "2026-10-01T22:27:14.451Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/31/54698f298d860c74efe0cc5b67f3b9f1b4793e3c968e32a5df197944e7bc/ladybug-0.21.2-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:8661bbd9ffaca773395c1730aaee76a3fbba93252048fb03fcabf7edb2a91e86", size = 10565987, upload-time = "2026-10-01T22:27:16.937Z" },
+    { url = "https://files.pythonhosted.org/packages/b9/f0/24274451b6ffef7ff27a9703075ea096f537adbdcd7602625a94d175717f/ladybug-0.21.2-cp314-cp314-win_amd64.whl", hash = "sha256:745034315a9b0b3236124e0154675c2c5a3c3bcf2d8c0cc224ef2bf6555b5020", size = 5643146, upload-time = "2026-10-01T22:27:19.313Z" },
+    { url = "https://files.pythonhosted.org/packages/df/d0/759dc69fb6b6926117b0d8a46dba3f79e65b36c018755de8bb20d1fb5e6c/ladybug-0.21.2-cp314-cp314-win_arm64.whl", hash = "sha256:f9964071aadf3171abcda8d0fbcdbad50caae25aab79820bd1df584f1dce6cf4", size = 8278898, upload-time = "2026-10-01T22:27:21.309Z" },
+]
+
+[[package]]
 name = "librt"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -328,6 +344,7 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "ladybug" },
     { name = "pyyaml" },
     { name = "uvicorn" },
 ]
@@ -345,6 +362,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = "==0.149.0" },
     { name = "httpx", specifier = "==0.28.1" },
+    { name = "ladybug", specifier = "==0.21.2" },
     { name = "pyyaml", specifier = "==6.0.3" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]

@@ -15,6 +15,8 @@ _FRONTMATTER = re.compile(r"---[ \t]*\n(.*?)\n(?:---|\.\.\.)[ \t]*(?:\n|\Z)", re
 # `#tag`, `#nested/tag`, `#tag-with_dash`, preceded by start or whitespace.
 _INLINE_TAG = re.compile(r"(?:\A|[\s(])#([\w/-]+)")
 _WIKILINK = re.compile(r"(!?)\[\[([^\[\]\n]+?)\]\]")
+# `[text](target)` or `[text](<target with spaces> "title")`.
+_MARKDOWN_LINK = re.compile(r"\[[^\[\]\n]*\]\(\s*(<[^<>\n]+>|[^\s()]+)(?:\s+\"[^\"\n]*\")?\s*\)")
 _INLINE_CODE = re.compile(r"(`+)[^`]*?\1")
 _NEWLINES = re.compile(r"\r\n?")
 
@@ -103,6 +105,9 @@ def parse_note(path: str, content: str) -> ParsedNote:
         links=_collect_links(text),
         body=body,
         frontmatter_error=error,
+        markdown_links=list(
+            dict.fromkeys(m[1].removeprefix("<").removesuffix(">") for m in _MARKDOWN_LINK.finditer(text))
+        ),
     )
 
 
