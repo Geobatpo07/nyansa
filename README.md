@@ -356,6 +356,20 @@ example, how long the sourdough proofing takes.
   not only list them. Deferred from the graph memory phase until its effect can
   be measured on a set of reference questions; for now the linked notes are
   shown to you and never sent to the model.
+- **Phase 6 — Evolving memory and supervised autonomy** (planned, after
+  phase 5). The vault stays the human source of truth, read-only. Nyansa
+  keeps its own separate memory, where every item records its type, origin,
+  date, supporting notes and status (proposed, accepted, rejected). Autonomy
+  is capped: Nyansa proposes and I approve; nothing is written without my
+  approval, and n8n workflows fix the sequence of steps. Planned parts:
+  - episodic memory built from a structured conversation history with cited
+    notes;
+  - facts learned from conversations;
+  - proposals (missing links, duplicates, contradictions);
+  - a weekly read-only review;
+  - an approval step where accepted items are written to a single inbox
+    folder by the only component allowed to write;
+  - an evaluation set of reference questions.
 
 ## Credits
 
