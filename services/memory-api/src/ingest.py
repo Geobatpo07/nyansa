@@ -220,9 +220,13 @@ class Ingestor:
             for chunk, vector in zip(chunks, vectors, strict=True)
         ]
         # Upsert first (same ids overwrite the previous version), then drop the
-        # chunks the note no longer has. The note is never absent from the index.
-        await self._store.upsert_chunks(points)
+        # chunks the note no longer has: the note is never absent from the index.
+        # The first chunk carries the note hash that marks the note as indexed,
+        # so it is written last: if anything before fails or the service stops,
+        # the note keeps its old hash and the next run indexes it again.
+        await self._store.upsert_chunks(points[1:])
         await self._store.delete_note(path, len(chunks))
+        await self._store.upsert_chunks(points[:1])
         return len(points)
 
     async def _ensure_collection(self) -> None:

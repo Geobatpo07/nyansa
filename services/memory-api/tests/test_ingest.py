@@ -115,6 +115,28 @@ async def test_reindexes_a_shortened_note_and_drops_the_chunks_it_no_longer_has(
     assert (first["text"], first["chunk_count"]) == ("Shorter now.", 1)
 
 
+async def test_a_note_interrupted_before_its_first_chunk_is_indexed_again(
+    ingestor: Ingestor, store: InMemoryStore, vault: Vault, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await ingestor.run("incremental")
+    old_hash = {n.path: n.hash for n in await store.list_indexed_notes()}["Alpha.md"]
+    vault.write("Alpha.md", "# Alpha\nShorter now.")
+
+    # Qdrant fails while the stale chunks of the shortened note are deleted.
+    async def qdrant_down(path: str, from_chunk_index: int = 0) -> None:
+        raise UpstreamError("qdrant", "request to /points/delete failed: ConnectError")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(store, "delete_note", qdrant_down)
+        assert (await ingestor.run("incremental")).notes.failed == 1
+
+    # The note still has its old hash, so the next run indexes it again.
+    assert {n.path: n.hash for n in await store.list_indexed_notes()}["Alpha.md"] == old_hash
+    assert (await ingestor.run("incremental")).notes.indexed == 1
+    assert store.notes()["Alpha.md"] == 1
+    assert store.points[point_id("Alpha.md", 0)].payload["text"] == "Shorter now."
+
+
 async def test_removes_every_chunk_of_a_deleted_note(ingestor: Ingestor, store: InMemoryStore, vault: Vault) -> None:
     vault.write("Long.md", f"# Long\n{'First part. ' * 20}\n## Two\n{'Second part. ' * 20}")
     await ingestor.run("incremental")
