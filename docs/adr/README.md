@@ -15,10 +15,12 @@ kept). New records start from [template.md](template.md).
 | [0006](0006-caddy-as-the-only-entry-point.md) | Caddy is the only entry point, without an API gateway | Accepted |
 | [0007](0007-deployment-through-git-hooks.md) | Deploy with Git hooks and immutable release folders | Accepted |
 | [0008](0008-memory-api-in-typescript.md) | memory-api in TypeScript | Superseded by [ADR-0011](0011-memory-api-in-python.md) |
+| [0009](0009-incremental-index-state-in-qdrant.md) | The incremental indexing state lives in Qdrant itself | Accepted |
 | [0010](0010-read-only-vault.md) | The vault is read-only for Nyansa | Accepted |
 | [0011](0011-memory-api-in-python.md) | Python is the project's programming language | Accepted |
 | [0012](0012-asynchronous-ingestion-with-persisted-state.md) | Asynchronous ingestion with its state in SQLite | Accepted |
 | [0013](0013-memory-api-as-the-single-facade.md) | memory-api is the only component that touches the memory stores | Accepted |
+| [0014](0014-versioned-n8n-workflows.md) | Versioned n8n workflows, imported only when missing | Accepted |
 | [0015](0015-chat-through-an-open-webui-pipe.md) | Chat through an Open WebUI pipe, with sources built from data | Accepted |
 | [0016](0016-conversation-history-stays-in-open-webui.md) | The conversation history stays in Open WebUI | Accepted |
 | [0017](0017-ladybugdb-for-the-graph.md) | LadybugDB for the graph of the vault | Accepted |
