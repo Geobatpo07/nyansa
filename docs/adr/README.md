@@ -21,3 +21,5 @@ kept). New records start from [template.md](template.md).
 | [0012](0012-ladybugdb-for-the-graph.md) | LadybugDB for the graph of the vault | Accepted |
 | [0013](0013-related-notes-are-shown-not-given-to-the-model.md) | Linked notes are shown to the user, not given to the model | Accepted |
 | [0014](0014-back-up-only-what-cannot-be-rebuilt.md) | Back up only what cannot be rebuilt | Accepted |
+| [0015](0015-conventions-for-services.md) | Conventions for the services in `services/` | Accepted — implementation pending |
+| [0016](0016-pdf-extraction-in-an-isolated-service.md) | PDF extraction in an isolated service, doc-extractor | Accepted — implementation pending |
