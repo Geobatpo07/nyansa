@@ -4,7 +4,8 @@
 # The stack must have been created once (docker compose ... up -d) so the
 # containers exist. Every Nyansa container is stopped, the volumes found in
 # the backup are replaced, the PostgreSQL dump is restored, then the
-# containers that were running are started again.
+# containers that were running are started again. The memory-api volume
+# comes back without its graph, which memory-api rebuilds when it starts.
 #
 # The .env in use must hold the same N8N_ENCRYPTION_KEY as when the backup
 # was taken, or n8n cannot decrypt the restored credentials.
@@ -24,6 +25,7 @@ START_ORDER=(
 	nyansa-postgres
 	nyansa-qdrant
 	nyansa-ollama
+	nyansa-memory-api
 	nyansa-tailscale
 	nyansa-n8n
 	nyansa-open-webui
