@@ -1,0 +1,257 @@
+{
+  "id": "nyChatWithNotes1",
+  "name": "Nyansa: chat with my notes",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "nyansa-chat",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c01",
+      "name": "Question",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "5b8e2f40-1c3d-4e6f-8a9b-7c0d1e2f3a41",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nyWebhookToken01",
+          "name": "Nyansa webhook token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://nyansa-memory-api:8080/context",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ query: String($json.body.question ?? '') }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c02",
+      "name": "Relevant notes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "nyMemoryApiCred1",
+          "name": "Nyansa memory-api"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "6a1d4c2e-0b7f-4e3a-9d58-2c1b0a9f8e71",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c03",
+      "name": "Any relevant note?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ollama request: the notes chosen by memory-api, each in a <note number=\"n\">\n// tag, and the rules of the answer. Tuned on qwen2.5:3b: the reminder right\n// before the question makes it cite the notes far more often.\nconst system = [\n  \"You answer the user's question from their personal notes, given below between <note> tags.\",\n  'Answer in the language of the question, even when the notes are in another language, in a few short sentences.',\n  'Every sentence must end with the number of the note it comes from, in brackets. Example: \"Le pointage dure 4 heures [1].\" Example: \"The proofing takes 12 hours [1].\"',\n  'Use only what the notes say. If they do not answer the question, say that your notes do not cover it. Never invent.',\n  'When you answer in French, address the user as « tu ».',\n  'Do not repeat the note titles, sections or tags.',\n].join('\\n');\nconst { query, context } = $json;\nreturn [{\n  json: {\n    model: 'qwen2.5:3b',\n    stream: false,\n    options: { temperature: 0.1 },\n    messages: [\n      { role: 'system', content: system },\n      { role: 'user', content: `${context}\\n\\nQuestion (answer in its language, citing the notes): ${query}` },\n    ],\n  },\n}];"
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c04",
+      "name": "Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://nyansa-ollama:11434/api/chat",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c05",
+      "name": "Answer with Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keeps only the citations of notes that were given to the model, then\n// lists the cited notes (path and title) under the answer.\nconst sources = $('Relevant notes').first().json.sources;\nconst byNumber = new Map(sources.map((source) => [source.n, source]));\nconst cited = new Set();\nconst text = String($json.message?.content ?? '')\n  .replace(/\\[(\\d+(?:\\s*,\\s*\\d+)*)\\]/g, (_match, list) => {\n    const numbers = list.split(',').map((n) => Number(n.trim())).filter((n) => byNumber.has(n));\n    numbers.forEach((n) => cited.add(n));\n    return numbers.length > 0 ? `[${numbers.join(', ')}]` : '';\n  })\n  .trim();\nconst used = sources.filter((source) => cited.has(source.n));\nconst list = (notes) => notes.map((s) => `[${s.n}] ${s.title} (${s.path})`).join('\\n');\nconst footer = used.length > 0\n  ? `Sources :\\n${list(used)}`\n  : `Notes consultées (non citées) :\\n${list(sources)}`;\nreturn [{\n  json: {\n    answer: `${text}\\n\\n${footer}`,\n    found: true,\n    cited: used.length > 0,\n    sources: (used.length > 0 ? used : sources).map(({ n, path, title, sections }) => ({ n, path, title, sections })),\n  },\n}];"
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c06",
+      "name": "Cite the notes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No note passed the relevance threshold: say so instead of answering.\nreturn [{\n  json: {\n    answer: 'Je n\\'ai trouvé aucune note pertinente dans ton vault pour cette question.',\n    found: false,\n    cited: false,\n    sources: [],\n  },\n}];"
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c07",
+      "name": "No relevant note",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "firstIncomingItem",
+        "options": {}
+      },
+      "id": "3f0c9a51-7d2e-4b8a-9c61-0a1e5b2d7c08",
+      "name": "Reply",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1320,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Question": {
+      "main": [
+        [
+          {
+            "node": "Relevant notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relevant notes": {
+      "main": [
+        [
+          {
+            "node": "Any relevant note?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any relevant note?": {
+      "main": [
+        [
+          {
+            "node": "Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No relevant note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prompt": {
+      "main": [
+        [
+          {
+            "node": "Answer with Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer with Ollama": {
+      "main": [
+        [
+          {
+            "node": "Cite the notes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cite the notes": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No relevant note": {
+      "main": [
+        [
+          {
+            "node": "Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

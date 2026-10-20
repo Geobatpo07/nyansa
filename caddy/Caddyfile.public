@@ -19,8 +19,9 @@
 	encode zstd gzip
 
 	# Webhooks are called by external services and carry their own auth
-	# (configured per workflow). Everything else, including the editor and
-	# its API, sits behind HTTP basic auth on top of the n8n login.
+	# (Header Auth in each workflow). Everything else, including the editor
+	# and its API, sits behind HTTP basic auth on top of the n8n login.
+	import internal-webhooks.caddy
 	@protected not path /webhook/* /webhook-test/* /webhook-waiting/*
 	basic_auth @protected {
 		{$N8N_BASIC_AUTH_USER} {$N8N_BASIC_AUTH_HASH}

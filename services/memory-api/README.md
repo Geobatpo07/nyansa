@@ -3,11 +3,11 @@
 Python service that turns the Obsidian vault into a searchable memory:
 it parses the notes, splits them along their headings, embeds the chunks with
 `nomic-embed-text` (Ollama) and stores them in Qdrant with their metadata.
-`/search` returns the most relevant chunks with the note they come from, so
-answers can cite their sources.
+`/search` returns the most relevant chunks with the note they come from, and
+`/context` prepares them for a chat answer that cites its notes.
 
-Python 3.14, asyncio, FastAPI, Pydantic, httpx; pytest, ruff, mypy (strict);
-dependencies locked with uv.
+Python 3.14, asyncio, FastAPI, Pydantic, httpx, SQLite; pytest, ruff, mypy
+(strict); dependencies locked with uv.
 
 ## API
 
@@ -32,18 +32,65 @@ Body (optional): `{ "mode": "incremental" | "full" }`, default `incremental`.
 - `full`: every note is reindexed.
 - In both modes, notes deleted from the vault are removed from the index.
 
-One ingestion runs at a time; a concurrent call gets `409`.
+The ingestion runs in the background: the answer is `202` with the task and a
+`Location: /ingest/status/{id}` header to follow it.
 
 ```json
 {
+  "id": "c1c4153c-d347-4ff6-a5a9-a57cd27d638a",
   "mode": "incremental",
-  "startedAt": "2026-09-26T15:07:10.000Z",
-  "durationMs": 2290,
-  "notes": { "scanned": 4, "indexed": 4, "unchanged": 0, "deleted": 0, "failed": 0, "skipped": 0 },
-  "chunks": { "upserted": 6 },
-  "errors": []
+  "status": "running",
+  "startedAt": "2026-10-20T00:21:03.660Z",
+  "finishedAt": null,
+  "progress": { "total": 0, "done": 0 },
+  "report": null,
+  "error": null
 }
 ```
+
+One ingestion runs at a time. A call while one runs gets `409`, with the
+running task and its `Location`:
+
+```json
+{ "error": "an ingestion is already running", "current": { "id": "c1c4153c-...", "status": "running" } }
+```
+
+### `GET /ingest/status/{id}` and `GET /ingest/status`
+
+`/ingest/status/{id}` returns one task (`404` if unknown, `400` if the id is
+not a UUID). `progress` counts the notes to index and the notes done. When the
+task ends, `finishedAt` is set and `status` is:
+
+| Status | Meaning |
+|---|---|
+| `completed` | The run ended; notes that failed one by one are in `report.errors`. |
+| `aborted` | Ollama or Qdrant failed 3 times in a row; see `report.aborted`. |
+| `failed` | The run could not complete (for example Qdrant down at the start); see `error`. |
+| `interrupted` | The service stopped (deployment, crash) during the run. |
+
+```json
+{
+  "id": "c1c4153c-...",
+  "status": "completed",
+  "progress": { "total": 4, "done": 4 },
+  "report": {
+    "mode": "incremental",
+    "startedAt": "2026-10-20T00:21:03.660Z",
+    "durationMs": 2290,
+    "notes": { "scanned": 4, "indexed": 4, "unchanged": 0, "deleted": 0, "failed": 0, "skipped": 0 },
+    "chunks": { "upserted": 6 },
+    "errors": []
+  },
+  "error": null
+}
+```
+
+`/ingest/status` returns `{ "current": <running task or null>, "recent": [<20 latest tasks>] }`.
+
+Tasks are kept in a SQLite file (`STATE_PATH`, on the `nyansa_memory_api_state`
+volume), so their state survives a restart; the 100 latest are kept. A task
+interrupted by a restart is not resumed: the next incremental run indexes the
+notes it did not record.
 
 A note that fails (for example an embedding error) is listed in `errors`. Its
 previous version stays in the index, and the next run retries it.
@@ -83,6 +130,36 @@ host, expect about 2 chunks per second (a 500-note vault of 2,250 chunks took
 }
 ```
 
+### `POST /context`
+
+The notes to answer a question from, numbered so the answer can cite them.
+
+```json
+{ "query": "Combien de temps dure l'apprêt de mon pain au levain ?", "limit": 8 }
+```
+
+`limit` 1 to 20 chunks (default 8); `tags` and `minScore` as for `/search`,
+`minScore` defaulting to `CONTEXT_MIN_SCORE`. The chunks are grouped by note;
+notes are numbered by their best chunk, and the context stays under
+`CONTEXT_MAX_CHARS`.
+
+```json
+{
+  "query": "Combien de temps dure l'apprêt de mon pain au levain ?",
+  "found": true,
+  "sources": [
+    { "n": 1, "path": "Recettes/Pain au levain.md", "title": "Pain au levain",
+      "sections": ["Pain au levain > Fermentation"], "score": 0.751 }
+  ],
+  "context": "<note number=\"1\">\nSection: Pain au levain > Fermentation\nPointage de 4 heures ...\n</note>"
+}
+```
+
+`found` is `false` (no source, empty context) when no chunk reaches the
+threshold: the caller can then say that no note is relevant instead of letting
+the model invent. Each note is wrapped in a `<note number="n">` tag: with
+`qwen2.5:3b`, numbered headers were copied into the answers, tags are not.
+
 Errors: `400` invalid body, `401` missing or wrong token, `413` body over
 64 KiB, `502` Ollama or Qdrant failure.
 
@@ -116,7 +193,9 @@ flowchart LR
 - **Storage**: one Qdrant point per chunk. The point id is a UUID derived from
   `path + chunk index`, so reindexing a note overwrites its points; chunks
   beyond the new count are deleted afterwards. The note is never missing from
-  the index during an update. Payload: `path`, `title`, `tags`, `links`,
+  the index during an update. The first chunk, which carries the note hash, is
+  written last: if a run stops in the middle of a note, the note keeps its old
+  hash and the next run indexes it again. Payload: `path`, `title`, `tags`, `links`,
   `section`, `chunk_index`, `chunk_count`, `text`, `note_hash`,
   `index_version`, `indexed_at`. `path`, `tags` and `chunk_index` are indexed.
 - **Incremental state** lives in Qdrant itself (first chunk of each note), so
@@ -140,6 +219,9 @@ flowchart LR
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Changing it reindexes all notes |
 | `CHUNK_MAX_CHARS` | `1500` | 200 to 8000; changing it reindexes all notes |
 | `VAULT_PATH` | `/vault` | Mounted read-only |
+| `STATE_PATH` | `/state/memory-api.db` | SQLite file of the ingestion tasks, on a writable volume |
+| `CONTEXT_MIN_SCORE` | `0.65` | `/context`: minimum similarity of a relevant chunk (-1 to 1) |
+| `CONTEXT_MAX_CHARS` | `6000` | `/context`: maximum size of the text given to the model |
 | `MEMORY_API_PORT` | `8080` | |
 | `LOG_LEVEL` | `info` | `fatal`, `error`, `warn`, `info`, `debug`, `trace` or `silent` |
 
@@ -151,10 +233,10 @@ created with another size is refused with an explicit error.
 ```bash
 cd services/memory-api
 uv sync                     # .venv with the locked dependencies
-uv run pytest               # parsing, chunking, incremental logic, adapters, API
+uv run pytest               # parsing, chunking, ingestion tasks, context, adapters, API
 uv run ruff check . && uv run ruff format --check .
 uv run mypy                 # strict
-uv run python -m src.main   # needs the variables below
+STATE_PATH=./state.db uv run python -m src.main   # needs the variables below
 ```
 
 Tests never call Ollama or Qdrant: the adapters are tested against
@@ -174,6 +256,8 @@ from `.env`):
 ```bash
 docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/ingest \
   -H "authorization: Bearer $MEMORY_API_TOKEN"
+docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/ingest/status \
+  -H "authorization: Bearer $MEMORY_API_TOKEN"
 docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/search \
   -H "authorization: Bearer $MEMORY_API_TOKEN" -H 'content-type: application/json' \
   -d '{"query": "What did I write about Docker?"}'
@@ -187,4 +271,9 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/sear
   headings.
 - `nomic-embed-text` is trained mostly on English. French notes are found,
   with less precise ranking; a multilingual model can be set with
-  `EMBEDDING_MODEL`.
+  `EMBEDDING_MODEL`. A question in another language than the notes scores
+  lower and may find nothing.
+- The relevance threshold of `/context` (`CONTEXT_MIN_SCORE`) was measured on
+  a small French vault: relevant questions scored 0.68 to 0.76, unrelated ones
+  up to 0.65. Check it on your own vault with `/search` and adjust it: raise it
+  if answers cite unrelated notes, lower it if relevant notes are missed.

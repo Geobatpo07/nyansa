@@ -159,7 +159,7 @@ sudo -iu nyansa
 cd /opt/nyansa/shared
 chmod 600 .env
 
-for key in POSTGRES_PASSWORD N8N_ENCRYPTION_KEY N8N_USER_MANAGEMENT_JWT_SECRET \
+for key in POSTGRES_PASSWORD N8N_ENCRYPTION_KEY N8N_USER_MANAGEMENT_JWT_SECRET N8N_WEBHOOK_TOKEN \
            WEBUI_SECRET_KEY QDRANT_API_KEY MEMORY_API_TOKEN WEBUI_ADMIN_PASSWORD; do
   sed -i "s|^$key=.*|$key=$(openssl rand -hex 32)|" .env
 done
@@ -169,10 +169,16 @@ sed -i 's|^OBSIDIAN_VAULT_PATH=.*|OBSIDIAN_VAULT_PATH=/opt/nyansa/shared/vault|'
 ```
 
 Hex secrets are used on purpose: they never contain `$`, quotes or `/`,
-which would break the `.env` or the JSON built from `QDRANT_API_KEY`.
+which would break the `.env` or the JSON that injects `MEMORY_API_TOKEN`,
+`N8N_WEBHOOK_TOKEN` and the SMTP settings into n8n
+(`CREDENTIALS_OVERWRITE_DATA`).
 
-Then edit `.env` (`nano .env`) and set `WEBUI_ADMIN_EMAIL`, plus the variables
-of your access profile (section 5).
+Then edit `.env` (`nano .env`) and set `WEBUI_ADMIN_EMAIL`, the variables of
+your access profile (section 5) and, for the failure e-mails of the scheduled
+ingestion, `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`,
+`SMTP_PASSWORD`, `ALERT_EMAIL_FROM` and `ALERT_EMAIL_TO`. Without `SMTP_HOST`,
+failures are only visible in the n8n executions. The SMTP password must not
+contain `"` or a backslash.
 
 | Variable | How to generate |
 |---|---|
@@ -182,7 +188,9 @@ of your access profile (section 5).
 | `WEBUI_SECRET_KEY` | `openssl rand -hex 32` |
 | `QDRANT_API_KEY` | `openssl rand -hex 32` |
 | `MEMORY_API_TOKEN` | `openssl rand -hex 32` |
+| `N8N_WEBHOOK_TOKEN` | `openssl rand -hex 32` (hex only: it is injected as JSON) |
 | `WEBUI_ADMIN_PASSWORD` | `openssl rand -hex 32`, or your own password |
+| `SMTP_PASSWORD` (optional) | Given by your mail provider (an application password, if possible) |
 | `N8N_BASIC_AUTH_HASH` (public) | `docker run --rm -it caddy:2.11.4-alpine caddy hash-password` (prompts for the password, so it stays out of shell history) |
 | `TS_AUTHKEY` (tailscale) | Tailscale admin console > Settings > Keys > Generate auth key |
 
@@ -328,7 +336,21 @@ instead of `.env`.
 
 **n8n.** Open the editor URL right after the first deployment and create the
 owner account. With the public profile, the browser first asks for the basic
-auth user and password.
+auth user and password. The Nyansa workflows are already there: the
+ingestion (every 30 minutes), the chat and the failure e-mail are active.
+
+**Chat with the notes (once).** In Open WebUI, as admin:
+
+1. *Admin Panel > Functions > +* (new function).
+2. Paste the content of `open-webui/src/nyansa_pipe.py`, keep the id
+   `nyansa`, name it `Nyansa`, save.
+3. Enable the function (toggle in the list).
+4. Open its valves (gear icon) and set `WEBHOOK_TOKEN` to the value of
+   `N8N_WEBHOOK_TOKEN` in `.env`. Keep `N8N_CHAT_URL` as is.
+5. In a new chat, pick the **Nyansa** model and ask a question about a note.
+
+The function is stored in the Open WebUI database (and in its backups): it
+stays across deployments. To update it, paste the new version over it.
 
 ## 10. Final checks
 
@@ -365,19 +387,43 @@ Public profile:
 curl -sI https://chat.example.com | grep -i strict-transport   # HSTS present
 curl -s -o /dev/null -w '%{http_code}\n' https://n8n.example.com/            # 401
 curl -s -o /dev/null -w '%{http_code}\n' https://n8n.example.com/webhook/x   # 404 from n8n, not 401
+curl -s -o /dev/null -w '%{http_code}\n' -X POST https://n8n.example.com/webhook/nyansa-chat   # 404 from Caddy
 ```
 
-In n8n, open the credential **Local QdrantApi database** and click **Test**.
-It must succeed without typing any key.
+With the tailscale profile, run the same `curl` against
+`https://<TS_HOSTNAME>.<TS_TAILNET>:8443` from a device of the tailnet.
 
-memory-api is internal only. Check it and run the first ingestion of the
-vault from a container on the same network:
+The n8n webhooks require their token (`403` without it):
+
+```bash
+WEBHOOK=$(grep '^N8N_WEBHOOK_TOKEN=' /opt/nyansa/shared/.env | cut -d= -f2)
+docker exec nyansa-open-webui curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  http://nyansa-n8n:5678/webhook/nyansa-chat -H 'content-type: application/json' -d '{"question":"x"}'
+# 403
+docker exec nyansa-open-webui curl -s -X POST http://nyansa-n8n:5678/webhook/nyansa-chat \
+  -H "X-Nyansa-Token: $WEBHOOK" -H 'content-type: application/json' \
+  -d '{"question": "a question about your notes"}'
+# {"answer": "... [1]\n\nSources :\n[1] <title> (<path>)", "found": true, ...}
+```
+
+The workflows are active:
+
+```bash
+docker exec nyansa-n8n n8n list:workflow --active=true
+# nyIngestSchedule, nyChatWithNotes1, nyAlertsOnError1
+```
+
+memory-api is internal only. Check it, and start the first ingestion now
+instead of waiting for the schedule:
 
 ```bash
 TOKEN=$(grep '^MEMORY_API_TOKEN=' /opt/nyansa/shared/.env | cut -d= -f2)
 docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/health
 # {"status":"ok","checks":{"ollama":"ok","qdrant":"ok"},"ingesting":false}
 docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/ingest \
+  -H "authorization: Bearer $TOKEN"
+# 202: {"id": "...", "status": "running", ...}
+docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/ingest/status \
   -H "authorization: Bearer $TOKEN"
 docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/search \
   -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
@@ -386,11 +432,14 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/sear
 
 The first ingestion needs `nomic-embed-text` to be downloaded
 (`docker logs nyansa-ollama-pull-model`). On a CPU-only server it embeds
-about 2 chunks per second: count roughly 15 to 20 minutes per 500 notes.
-The HTTP call stays open until the end; if it is cut, the ingestion still
-finishes in the background (`/health` shows `"ingesting": true`). Later
-incremental runs only process the changed notes. From phase 3, an n8n
-workflow runs it on a schedule.
+about 2 chunks per second: count roughly 15 to 20 minutes per 500 notes. It
+runs in the background; `/ingest/status` shows its progress. Later
+incremental runs, every 30 minutes, only process the changed notes.
+
+Calibrate the chat on your vault: ask `/search` 3 or 4 questions your notes
+answer and 2 they do not, and compare the best `score` of each. The chat
+keeps the notes above `CONTEXT_MIN_SCORE` (0.65 by default): set it in `.env`
+between the two groups if needed, then redeploy.
 
 Finally, take a first manual backup (next section).
 
@@ -462,6 +511,82 @@ docker rm -f nyansa-caddy-public         # or nyansa-caddy-tailscale nyansa-tail
 
 Update the firewall rules to match (section 6).
 
+### Update a workflow
+
+A deployment imports only the workflows and credentials of `n8n/` whose id
+does not exist in n8n yet: a workflow you edited in the editor is never
+overwritten. To bring editor changes back into the repository, run
+`scripts/n8n-export.sh` on your dev machine.
+
+To replace a workflow of the server with the version of the repository
+(after a change in `n8n/workflows/`, deployed first):
+
+```bash
+cd /opt/nyansa/current
+docker compose -p nyansa run --rm --no-deps --entrypoint sh nyansa-n8n-import -c \
+  'n8n import:workflow --input=/nyansa/workflows/nyChatWithNotes1.json && n8n publish:workflow --id=nyChatWithNotes1'
+docker restart nyansa-n8n
+```
+
+`nyAlertsOnError1.json` holds placeholders for the alert addresses: for this
+one, replace it from the editor instead (or set the addresses again after the
+import). Publishing is needed for the workflows that must be active
+(ingestion, chat, alerts); the restart applies it.
+
+### Upgrade an instance that still has the demo data
+
+Instances deployed before the Nyansa workflows still have the demo workflow
+and credentials of the starter kit. Before pushing:
+
+1. Add the new variables to `/opt/nyansa/shared/.env`. The deployment fails
+   without `N8N_WEBHOOK_TOKEN`:
+
+   ```bash
+   cd /opt/nyansa/shared
+   echo "N8N_WEBHOOK_TOKEN=$(openssl rand -hex 32)" >> .env
+   cat >> .env <<'EOF'
+   SMTP_HOST=
+   SMTP_PORT=587
+   SMTP_SECURE=false
+   SMTP_USER=
+   SMTP_PASSWORD=
+   ALERT_EMAIL_FROM=
+   ALERT_EMAIL_TO=
+   EOF
+   nano .env     # SMTP and alert addresses, if you want the failure e-mails
+   ```
+
+2. `git push prod main`. The deployment imports the Nyansa credentials and
+   workflows next to the demo ones, and activates them.
+3. Remove the demo workflow and its two credentials (the deployment took a
+   backup just before). n8n is stopped during the change:
+
+   ```bash
+   cd /opt/nyansa/current
+   PGUSER=$(grep '^POSTGRES_USER=' /opt/nyansa/shared/.env | cut -d= -f2)
+   PGDB=$(grep '^POSTGRES_DB=' /opt/nyansa/shared/.env | cut -d= -f2)
+   docker stop nyansa-n8n
+   docker exec -i nyansa-postgres psql -U "$PGUSER" -d "$PGDB" -v ON_ERROR_STOP=1 <<'SQL'
+   BEGIN;
+   DELETE FROM workflow_published_version WHERE "workflowId" = 'srOnR8PAY3u4RSwb';
+   DELETE FROM workflow_entity WHERE id = 'srOnR8PAY3u4RSwb';
+   DELETE FROM credentials_entity WHERE id IN ('sFfERYppMeBnFNeA', 'xHuYe0MDGOs9IpBW');
+   COMMIT;
+   SQL
+   docker start nyansa-n8n
+   docker exec nyansa-n8n n8n list:workflow
+   ```
+
+   Expected output of `psql`: `DELETE 0` or `DELETE 1`, then `DELETE 1` and
+   `DELETE 2`. The workflows listed are the three Nyansa ones (plus yours).
+   The executions of the demo workflow are deleted with it. To undo, restore
+   the backup taken by the deployment.
+
+4. Install the chat function in Open WebUI (section 9).
+
+The vault is no longer mounted into n8n: workflows of your own that read
+`/data/obsidian-vault` must use memory-api instead.
+
 ### Upgrading images
 
 Image versions are pinned in `docker-compose.yml`. Change them in a commit
@@ -472,8 +597,10 @@ if the stack does not become healthy.
 
 | Secret | Procedure |
 |---|---|
-| `QDRANT_API_KEY` | Edit `.env` and redeploy. Qdrant, n8n and memory-api pick up the new key. |
-| `MEMORY_API_TOKEN` | Edit `.env` and redeploy; update the clients that call memory-api. |
+| `QDRANT_API_KEY` | Edit `.env` and redeploy. Qdrant and memory-api pick up the new key. |
+| `MEMORY_API_TOKEN` | Edit `.env` and redeploy. n8n receives the new token; update any other client of memory-api. |
+| `N8N_WEBHOOK_TOKEN` | Edit `.env` and redeploy, then set the new value in the valves of the Nyansa function in Open WebUI. |
+| `SMTP_PASSWORD` | Edit `.env` and redeploy. |
 | `N8N_BASIC_AUTH_HASH` | Edit `.env` and redeploy. |
 | `WEBUI_SECRET_KEY` | Edit `.env` and redeploy. Every user is logged out. |
 | `POSTGRES_PASSWORD` | Change it in PostgreSQL first (`ALTER USER`), then in `.env`, then redeploy. |
@@ -490,3 +617,9 @@ if the stack does not become healthy.
 | Caddy cannot obtain a certificate (public) | DNS records, ports 80/443 open, `docker logs nyansa-caddy-public`. |
 | No certificate on the tailnet | MagicDNS and HTTPS enabled; `docker logs nyansa-tailscale`, `docker logs nyansa-caddy-tailscale`. |
 | `cannot reach the Docker daemon` | `id nyansa` lists the `docker` group; log out and back in after `usermod`. |
+| `nyansa-n8n-import` exits with an error | `docker logs nyansa-n8n-import`; the n8n container does not start until the import succeeds. |
+| The chat answers "n8n refuse le jeton" | `WEBHOOK_TOKEN` in the valves of the Nyansa function differs from `N8N_WEBHOOK_TOKEN`. |
+| The chat answers "aucune note pertinente" for a note you have | The vault is indexed (`/ingest/status`) and `CONTEXT_MIN_SCORE` is not too high for your notes (section 10). |
+| The chat cites unrelated notes | Raise `CONTEXT_MIN_SCORE` (section 10). |
+| No failure e-mail | `SMTP_*` and `ALERT_EMAIL_*` in `.env`; the executions of "Nyansa: e-mail on workflow failure" in n8n. |
+| An n8n credential of your own (Header Auth, Bearer, SMTP) gets the Nyansa secret | `CREDENTIALS_OVERWRITE_DATA` applies to every credential of these types: use another type (Custom Auth) for other services. |

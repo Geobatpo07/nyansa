@@ -23,12 +23,17 @@ class Config(BaseModel):
     # Bearer token required on every route except /health.
     MEMORY_API_TOKEN: str = Field(min_length=32)
     VAULT_PATH: str = Field("/vault", min_length=1)
+    # SQLite file of the ingestion tasks, in a writable volume.
+    STATE_PATH: str = Field("/state/memory-api.db", min_length=1)
     OLLAMA_URL: Url = "http://nyansa-ollama:11434"
     EMBEDDING_MODEL: str = Field("nomic-embed-text", min_length=1)
     QDRANT_URL: Url = "http://nyansa-qdrant:6333"
     QDRANT_API_KEY: str = Field(min_length=1)
     QDRANT_COLLECTION: str = Field("obsidian_notes", pattern=r"^[\w-]+$")
     CHUNK_MAX_CHARS: int = Field(1500, ge=200, le=8000)
+    # /context: minimum similarity of a relevant chunk, and size of the context given to the model.
+    CONTEXT_MIN_SCORE: float = Field(0.65, ge=-1, le=1)
+    CONTEXT_MAX_CHARS: int = Field(6000, ge=500, le=50000)
     LOG_LEVEL: Literal["fatal", "error", "warn", "info", "debug", "trace", "silent"] = "info"
 
 

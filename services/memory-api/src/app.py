@@ -2,6 +2,7 @@
 
 import asyncio
 import hmac
+import uuid
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
 
@@ -10,8 +11,9 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from .context import Context, build_context
 from .domain import Embedder, UpstreamError, VectorStore
-from .ingest import IngestInProgressError, Ingestor, IngestReport
+from .jobs import IngestJobs, Job, JobInProgressError, JobStore
 
 MAX_BODY_BYTES = 64 * 1024
 
@@ -30,8 +32,24 @@ class SearchBody(BaseModel):
     tags: Annotated[list[Annotated[str, StringConstraints(min_length=1)]], Field(max_length=20)] | None = None
     min_score: Annotated[float | None, Field(ge=-1, le=1, alias="minScore")] = None
 
+    def normalized_tags(self) -> list[str] | None:
+        return [tag.removeprefix("#").lower() for tag in self.tags] if self.tags is not None else None
 
-def build_app(token: str, ingestor: Ingestor, embedder: Embedder, store: VectorStore) -> FastAPI:
+
+class ContextBody(SearchBody):
+    # Chunks to consider; minScore defaults to the service's relevance threshold.
+    limit: Annotated[int, Field(ge=1, le=20)] = 8
+
+
+def build_app(
+    token: str,
+    jobs: IngestJobs,
+    history: JobStore,
+    embedder: Embedder,
+    store: VectorStore,
+    context_min_score: float = 0.65,
+    context_max_chars: int = 6000,
+) -> FastAPI:
     app = FastAPI(title="Nyansa memory-api", docs_url=None, redoc_url=None)
     expected = token.encode()
 
@@ -56,9 +74,13 @@ def build_app(token: str, ingestor: Ingestor, embedder: Embedder, store: VectorS
         ]
         return JSONResponse({"error": "invalid request", "issues": issues}, status_code=400)
 
-    @app.exception_handler(IngestInProgressError)
-    async def ingest_in_progress(_request: Request, err: IngestInProgressError) -> Response:
-        return JSONResponse({"error": str(err)}, status_code=409)
+    @app.exception_handler(JobInProgressError)
+    async def ingest_in_progress(_request: Request, err: JobInProgressError) -> Response:
+        return JSONResponse(
+            {"error": str(err), "current": {"id": err.job.id, "status": err.job.status}},
+            status_code=409,
+            headers={"location": _location(err.job)},
+        )
 
     @app.exception_handler(UpstreamError)
     async def upstream_failure(_request: Request, err: UpstreamError) -> Response:
@@ -74,18 +96,29 @@ def build_app(token: str, ingestor: Ingestor, embedder: Embedder, store: VectorS
         return {
             "status": "ok" if ok else "degraded",
             "checks": {"ollama": ollama, "qdrant": qdrant},
-            "ingesting": ingestor.is_running,
+            "ingesting": jobs.current is not None,
         }
 
-    @app.post("/ingest", response_model_exclude_none=True)
-    async def ingest(body: IngestBody | None = None) -> IngestReport:
-        return await ingestor.run((body or IngestBody()).mode)
+    # Starts an ingestion in the background; its state is at the Location URL.
+    @app.post("/ingest", status_code=202)
+    async def ingest(response: Response, body: IngestBody | None = None) -> Job:
+        job = jobs.start((body or IngestBody()).mode)
+        response.headers["location"] = _location(job)
+        return job
+
+    @app.get("/ingest/status")
+    async def ingest_status() -> dict[str, object]:
+        return {"current": jobs.current, "recent": history.recent()}
+
+    @app.get("/ingest/status/{job_id}", response_model=None)
+    async def ingest_job(job_id: uuid.UUID) -> Job | JSONResponse:
+        job = history.get(str(job_id))
+        return job if job is not None else JSONResponse({"error": "unknown ingestion"}, status_code=404)
 
     @app.post("/search")
     async def search(body: SearchBody) -> dict[str, object]:
         vector = await embedder.embed_query(body.query)
-        tags = [tag.removeprefix("#").lower() for tag in body.tags] if body.tags is not None else None
-        hits = await store.search(vector, body.limit, tags, body.min_score)
+        hits = await store.search(vector, body.limit, body.normalized_tags(), body.min_score)
         results = [
             {
                 "score": hit.score,
@@ -100,7 +133,20 @@ def build_app(token: str, ingestor: Ingestor, embedder: Embedder, store: VectorS
         ]
         return {"query": body.query, "results": results}
 
+    # The relevant notes for a chat answer, numbered so the answer can cite
+    # them. found is false when nothing passes the relevance threshold.
+    @app.post("/context")
+    async def context(body: ContextBody) -> Context:
+        vector = await embedder.embed_query(body.query)
+        min_score = context_min_score if body.min_score is None else body.min_score
+        hits = await store.search(vector, body.limit, body.normalized_tags(), min_score)
+        return build_context(body.query, hits, context_max_chars)
+
     return app
+
+
+def _location(job: Job) -> str:
+    return f"/ingest/status/{job.id}"
 
 
 async def _check(probe: Callable[[], Awaitable[None]]) -> str:

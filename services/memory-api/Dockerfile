@@ -22,6 +22,9 @@ ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 COPY --from=build /app /app
+# Mount point of the state volume (SQLite), owned by the service user so a
+# new named volume gets the same owner.
+RUN mkdir /state && chown 65532:65532 /state
 WORKDIR /app
 USER 65532:65532
 EXPOSE 8080
