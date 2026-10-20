@@ -192,8 +192,6 @@ services:
     volumes:
       - nyansa_n8n_storage:/home/node/.n8n
       - ${NYANSA_FILES_PATH:-./shared}:/data/shared
-      # Vault Obsidian synchronisé par Syncthing, monté en lecture/écriture
-      - ${OBSIDIAN_VAULT_PATH}:/data/obsidian-vault
     depends_on:
       nyansa-postgres:
         condition: service_healthy
