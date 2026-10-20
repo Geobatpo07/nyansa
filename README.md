@@ -12,25 +12,23 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
 
 ## Features
 
-- **One-command stack.** Services on a dedicated `nyansa` Docker network, with
-  named volumes for every stateful component and a fixed Compose project name.
-- **Local inference with Ollama.** On first start, the stack pulls `qwen2.5:3b`
-  (chat) and `nomic-embed-text` (embeddings). Both are sized for CPU-only
-  machines with limited RAM. `cpu`, `gpu-nvidia` and `gpu-amd` profiles.
-- **Workflow orchestration with n8n.** State is persisted in PostgreSQL.
-  Credentials and workflows in `n8n/demo-data/` are imported on first boot and
-  skipped if workflows already exist.
-- **Obsidian vault access.** The vault folder set in `OBSIDIAN_VAULT_PATH` is
-  mounted read/write into n8n at `/data/obsidian-vault`.
+- **Chat with your notes, with sources.** In Open WebUI, the "Nyansa" model
+  answers from the notes of your vault and lists the notes it used (path and
+  title). When no note is relevant, it says so instead of answering.
 - **RAG over the vault (`memory-api`).** A Python service parses the notes
   (frontmatter, tags, `[[wikilinks]]`), splits them along their headings,
   embeds them with `nomic-embed-text` and stores them in Qdrant with their
   path, title, tags, section and content hash. Indexing is incremental: only
-  changed notes are re-embedded and deleted notes are removed. `/search`
-  returns the relevant chunks with their source note for citations.
-- **Vector store.** Qdrant, protected by an API key that n8n and memory-api
-  receive at runtime.
-- **Chat interface.** Open WebUI connected to Ollama.
+  changed notes are re-embedded and deleted notes are removed. Ingestions run
+  in the background, with their state in SQLite.
+- **Scheduled indexing with n8n.** Every 30 minutes, an n8n workflow starts an
+  incremental ingestion and follows it to the end. A failure sends an e-mail.
+- **Versioned workflows.** The n8n workflows and credentials live in `n8n/`,
+  without any secret. They are imported when missing, never over your edits,
+  and `scripts/n8n-export.sh` brings editor changes back into the repository.
+- **Local inference with Ollama.** `qwen2.5:3b` (chat) and `nomic-embed-text`
+  (embeddings), sized for CPU-only machines with limited RAM. `cpu`,
+  `gpu-nvidia` and `gpu-amd` profiles.
 - **Secure access, two modes.** Caddy serves Open WebUI and the n8n editor
   over HTTPS, either on a public domain (Let's Encrypt, basic auth in front of
   n8n) or on a Tailscale tailnet with no public port at all.
@@ -39,9 +37,9 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
   success. The previous release is restarted otherwise.
 - **Backups.** Scripts to back up and restore the PostgreSQL database and every
   stateful volume, with checksums and retention.
-- **Verifiable security rules.** `scripts/check-exposure.sh` checks the port
-  exposure of all 9 profile combinations, and `scripts/check-secrets.sh`
-  refuses tracked secrets. Both run before every push.
+- **Verifiable rules.** Scripts check the port exposure of all 9 profile
+  combinations, refuse tracked secrets and check that every n8n webhook has
+  its own authentication.
 
 ## Architecture
 
@@ -60,13 +58,13 @@ flowchart LR
         end
 
         subgraph net["Docker network: nyansa (internal)"]
-            webui["nyansa-open-webui<br/>chat UI<br/>127.0.0.1:3000"]
-            n8n["nyansa-n8n<br/>workflows and agents<br/>127.0.0.1:5678"]
+            webui["nyansa-open-webui<br/>chat UI + Nyansa pipe"]
+            n8n["nyansa-n8n<br/>ingestion schedule, chat workflow"]
             pg[("nyansa-postgres<br/>n8n state")]
             qdrant[("nyansa-qdrant<br/>vector store, API key")]
             ollama["nyansa-ollama<br/>qwen2.5:3b, nomic-embed-text"]
-            pull["nyansa-ollama-pull-model<br/>one-shot model download"]
-            memory["nyansa-memory-api<br/>Python RAG service<br/>/ingest, /search"]
+            memory["nyansa-memory-api<br/>Python RAG service<br/>/ingest, /context, /search"]
+            state[("SQLite<br/>ingestion tasks")]
         end
     end
 
@@ -77,34 +75,57 @@ flowchart LR
     caddyPub --> n8n
     caddyTs --> webui
     caddyTs --> n8n
-    vault -- "bind mount /data/obsidian-vault" --> n8n
+    webui -- "question (X-Nyansa-Token)" --> n8n
+    n8n -- "/context, /ingest (bearer token)" --> memory
+    n8n -- "answer from the cited notes" --> ollama
     n8n -- "workflow state" --> pg
-    n8n -- "vectors (api-key)" --> qdrant
-    n8n -- "chat and embeddings" --> ollama
-    webui -- "chat" --> ollama
-    pull -- "pull models" --> ollama
     vault -- "read-only /vault" --> memory
-    n8n -- "/ingest, /search (bearer token)" --> memory
     memory -- "embeddings" --> ollama
     memory -- "chunks + metadata (api-key)" --> qdrant
+    memory --- state
+```
+
+A question follows this path:
+
+```mermaid
+sequenceDiagram
+    actor You
+    participant W as Open WebUI (Nyansa pipe)
+    participant N as n8n (chat workflow)
+    participant M as memory-api
+    participant O as Ollama
+    You->>W: question
+    W->>N: POST /webhook/nyansa-chat (X-Nyansa-Token)
+    N->>M: POST /context (bearer token)
+    M-->>N: numbered notes, or found = false
+    alt a note is relevant
+        N->>O: notes + question, cite with [n]
+        O-->>N: answer
+        N->>N: keep valid [n], list the cited notes
+    else nothing relevant
+        N->>N: "no relevant note"
+    end
+    N-->>W: answer + sources
+    W-->>You: answer, with the notes as citations
 ```
 
 Only Caddy is reachable from outside. PostgreSQL, Qdrant, Ollama and
-memory-api publish no port. n8n and Open WebUI listen on `127.0.0.1` for SSH tunnels only. The Ollama
-container is named `nyansa-ollama` whatever the hardware profile.
+memory-api publish no port. n8n and Open WebUI listen on `127.0.0.1` for SSH
+tunnels only. The Ollama container is named `nyansa-ollama` whatever the
+hardware profile.
 
 ## Tech stack
 
 | Component | Image (pinned default) | Role |
 |---|---|---|
-| n8n | `n8nio/n8n:2.40.7` | Workflow engine and AI agent orchestration |
+| n8n | `n8nio/n8n:2.40.7` | Workflows: scheduled ingestion, chat with sources, alerts |
 | Ollama | `ollama/ollama:0.34.4` (`-rocm` for AMD) | Local LLM and embedding inference |
 | Qdrant | `qdrant/qdrant:v1.19.1` | Vector store |
 | PostgreSQL | `postgres:17.11-alpine` | n8n persistence |
-| Open WebUI | `ghcr.io/open-webui/open-webui:v0.7.2` | Browser chat interface for Ollama |
+| Open WebUI | `ghcr.io/open-webui/open-webui:v0.7.2` | Browser chat interface, with the Nyansa pipe (`open-webui/`) |
 | Caddy | `caddy:2.11.4-alpine` | Reverse proxy, automatic HTTPS |
 | Tailscale | `tailscale/tailscale:v1.102.5` | Private access (tailscale profile) |
-| memory-api | built from `services/memory-api` (Python 3.14, FastAPI, asyncio) | Vault ingestion and semantic search |
+| memory-api | built from `services/memory-api` (Python 3.14, FastAPI, asyncio, SQLite) | Vault ingestion, semantic search, chat context |
 | `qwen2.5:3b` | Ollama model | Chat model |
 | `nomic-embed-text` | Ollama model | Embedding model |
 
@@ -119,14 +140,17 @@ needs authentication over HTTPS, and that no secret lives in the repository.
 | Measure | Where |
 |---|---|
 | PostgreSQL, Qdrant, Ollama and memory-api publish no port; they are only reachable on the internal `nyansa` network. | `docker-compose.yml` |
-| memory-api requires a bearer token (constant-time comparison), runs as a non-root user with a read-only root filesystem, no Linux capabilities and a read-only vault mount. | `docker-compose.yml`, `services/memory-api` |
+| memory-api requires a bearer token (constant-time comparison), runs as a non-root user with a read-only root filesystem, no Linux capabilities and a read-only vault mount; its only writable path is the volume of its SQLite state. | `docker-compose.yml`, `services/memory-api` |
+| No container can write to the vault: n8n does not mount it, memory-api mounts it read-only. | `docker-compose.yml`, `scripts/check-exposure.sh` |
 | n8n and Open WebUI are bound to `127.0.0.1`; outside access goes through Caddy. | `docker-compose.yml` |
 | Docker bypasses UFW for published ports, so exposure is enforced in Compose and checked for all 9 profile combinations. | `scripts/check-exposure.sh` |
 | HTTPS everywhere: Let's Encrypt (public) or tailnet certificates (tailscale). HSTS, `nosniff`, `frame-ancestors 'self'`, no `Server` header. | `caddy/` |
-| n8n editor: HTTP basic auth (public profile) on top of the n8n login. Webhook paths are exempt and use per-workflow auth. | `caddy/Caddyfile.public` |
+| n8n editor: HTTP basic auth (public profile) on top of the n8n login. Webhook paths are exempt from it, so every webhook requires its own Header Auth (`X-Nyansa-Token`), which a script verifies. | `caddy/Caddyfile.public`, `scripts/check-n8n-workflows.sh` |
+| The chat webhook is refused by Caddy (404): only the Open WebUI pipe, on the internal network, calls it. | `caddy/internal-webhooks.caddy` |
+| n8n credentials carry no secret: tokens and SMTP password are injected from `.env` through `CREDENTIALS_OVERWRITE_DATA`, so they are in neither the n8n database nor the exported workflows. | `docker-compose.yml`, `n8n/credentials/` |
 | Tailscale profile: no port published on the host at all. | `docker-compose.yml` |
 | Open WebUI: public sign-up disabled; the admin account is created from `.env` only when no user exists, so nobody can register first. | `docker-compose.yml` |
-| Qdrant requires an API key. n8n receives it through `CREDENTIALS_OVERWRITE_DATA`, never stored in Git. | `docker-compose.yml` |
+| Qdrant requires an API key, known only to memory-api. | `docker-compose.yml` |
 | n8n gets an explicit list of variables, not the whole `.env`; workflows cannot read environment variables; cookies are secure. | `docker-compose.yml` |
 | Compose refuses to start when a critical secret is missing. | `docker-compose.yml` |
 | Images are pinned to verified versions. | `docker-compose.yml` |
@@ -136,7 +160,9 @@ needs authentication over HTTPS, and that no secret lives in the repository.
 
 Known limits: members of the `docker` group are root-equivalent on the host.
 Backups are not encrypted: copy them to an encrypted destination. Ollama has no
-authentication of its own and relies on network isolation.
+authentication of its own and relies on network isolation. Every n8n
+credential of type Header Auth, Bearer Auth or SMTP receives the Nyansa
+secrets: use another type (Custom Auth) for other services.
 
 ## Deployment
 
@@ -155,8 +181,8 @@ Production runs from immutable release folders, never from a working tree:
 
 [docs/DEPLOY.md](docs/DEPLOY.md) is the full from-scratch guide: server
 preparation, secret generation, public or Tailscale access, firewall, first
-deployment, admin accounts, final checks, backups, restore, rollback and
-secret rotation.
+deployment, admin accounts, the chat pipe, final checks, backups, restore,
+rollback and secret rotation.
 
 ## Getting started (local)
 
@@ -181,11 +207,13 @@ Edit `.env` and set at least:
 | `POSTGRES_PASSWORD` | PostgreSQL password |
 | `N8N_ENCRYPTION_KEY` | Key n8n uses to encrypt stored credentials |
 | `N8N_USER_MANAGEMENT_JWT_SECRET` | Secret for n8n session tokens |
+| `N8N_WEBHOOK_TOKEN` | Secret of the n8n webhooks (`X-Nyansa-Token` header) |
 | `WEBUI_SECRET_KEY` | Secret for Open WebUI sessions |
 | `QDRANT_API_KEY` | Qdrant API key |
 | `MEMORY_API_TOKEN` | Bearer token of memory-api (32+ characters) |
 | `WEBUI_ADMIN_EMAIL`, `WEBUI_ADMIN_PASSWORD` | First Open WebUI admin account |
 | `OBSIDIAN_VAULT_PATH` | Absolute path to your vault on the host |
+| `SMTP_*`, `ALERT_EMAIL_*` | Optional: failure e-mails of the scheduled ingestion |
 
 Generate each secret with `openssl rand -hex 32`, or in PowerShell with
 `[System.Guid]::NewGuid().ToString("N")`.
@@ -199,17 +227,22 @@ docker compose --profile cpu up -d --build
 docker logs -f nyansa-ollama-pull-model   # first start: model download
 ```
 
-Index the vault and ask a question (memory-api is internal, so the calls go
-through a container on the `nyansa` network):
+The vault is indexed by n8n every 30 minutes. To start an ingestion now and
+follow it (memory-api is internal, so the calls go through a container on the
+`nyansa` network):
 
 ```bash
 TOKEN=<MEMORY_API_TOKEN from .env>
 docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/ingest \
+  -H "authorization: Bearer $TOKEN"          # 202, with the task id
+docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/ingest/status \
   -H "authorization: Bearer $TOKEN"
-docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/search \
-  -H "authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"query": "What did I write about Docker?", "limit": 3}'
 ```
+
+Then install the chat once: in Open WebUI, *Admin Panel > Functions > +*,
+paste [open-webui/src/nyansa_pipe.py](open-webui/src/nyansa_pipe.py), save,
+enable it, and set `WEBHOOK_TOKEN` (your `N8N_WEBHOOK_TOKEN`) in its valves
+(gear icon). Pick the **Nyansa** model in a new chat and ask about your notes.
 
 The API, the indexing design and its limits are documented in
 [services/memory-api/README.md](services/memory-api/README.md).
@@ -229,18 +262,38 @@ docker run --rm --network nyansa -p 127.0.0.1:6333:6333 alpine/socat:1.8.1.3 \
 # then http://localhost:6333/dashboard, with QDRANT_API_KEY
 ```
 
+### Editing the workflows
+
+Edit the workflows in the n8n editor, then bring them back into the repository:
+
+```bash
+scripts/n8n-export.sh          # every workflow of n8n/workflows, from nyansa-n8n
+git diff n8n/workflows
+```
+
+A deployment imports only the workflows that do not exist yet in n8n, so your
+edits are never overwritten. To replace an existing workflow with the version
+of the repository, see [docs/DEPLOY.md](docs/DEPLOY.md#update-a-workflow).
+
 ### Tests and checks
 
-The memory-api checks need [uv](https://docs.astral.sh/uv/) (it installs Python 3.14
-if missing); the shell checks need bash, Docker and jq.
+The Python checks need [uv](https://docs.astral.sh/uv/) (it installs the
+Python versions if missing); the shell checks need bash, Docker and jq.
 
 ```bash
 (cd services/memory-api && uv sync && uv run pytest && uv run ruff check . && uv run mypy)
+(cd open-webui && uv sync && uv run pytest && uv run ruff check . && uv run mypy)   # Python 3.11, as Open WebUI
 scripts/check-exposure.sh --env-file .env.example   # port exposure, 9 profile combinations
 scripts/check-secrets.sh HEAD                       # tracked secrets
-scripts/tests/check-secrets.test.sh                 # secrets scanner tests (throwaway Git repo)
+scripts/check-n8n-workflows.sh                      # webhook auth, credentials without secrets
+scripts/tests/check-secrets.test.sh                 # tests of the secrets scanner (throwaway Git repo)
+scripts/tests/check-n8n-workflows.test.sh           # tests of the workflow checks
 scripts/build-publish.sh HEAD                       # build and validate ./publish
 ```
+
+`tests/fixtures/vault` holds four notes with distinct facts to try the chat end
+to end: point `OBSIDIAN_VAULT_PATH` to it on a test stack and ask, for
+example, how long the sourdough proofing takes.
 
 ## Project structure
 
@@ -248,24 +301,27 @@ scripts/build-publish.sh HEAD                       # build and validate ./publi
 .
 ├── docker-compose.yml        # Services, volumes, network; hardware and access profiles
 ├── .env.example              # Template for secrets, URLs, profiles and paths
-├── caddy/                    # Caddyfiles for the public and tailscale profiles
+├── caddy/                    # Caddyfiles for the public and tailscale profiles, shared snippets
 ├── services/
-│   └── memory-api/           # Python RAG service: parsing, chunking, ingestion, search (+ pytest)
+│   └── memory-api/           # Python RAG service: ingestion tasks, search, chat context (+ pytest)
+├── open-webui/               # Nyansa pipe for Open WebUI (+ pytest, Python 3.11)
 ├── n8n/
-│   └── demo-data/
-│       ├── credentials/      # n8n credentials (Ollama, Qdrant), no secret, imported on first boot
-│       └── workflows/        # n8n workflows, imported on first boot
+│   ├── credentials/          # n8n credentials without secrets, imported when missing
+│   └── workflows/            # Ingestion schedule, chat with sources, failure e-mail
 ├── scripts/
 │   ├── backup.sh / restore.sh        # Backups of the database and volumes
 │   ├── check-exposure.sh             # Port exposure rules for every profile combination
 │   ├── check-secrets.sh              # Refuses tracked secrets
-│   ├── tests/                        # Tests of the scripts (check-secrets)
+│   ├── check-n8n-workflows.sh        # Webhook auth and secret-free credentials
+│   ├── n8n-export.sh                 # Exports edited workflows back to n8n/workflows
+│   ├── tests/                        # Tests of the check scripts
 │   ├── build-publish.sh              # Builds a release folder from a commit
 │   ├── wait-healthy.sh               # Waits for a healthy stack
 │   └── install-hooks.sh              # Installs the Git hooks
 ├── hooks/
 │   ├── pre-push              # Dev machine: secrets scan and release build
 │   └── post-receive          # Server: push-to-deploy with rollback
+├── tests/fixtures/vault/     # Small vault for end-to-end chat checks
 ├── docs/
 │   └── DEPLOY.md             # From-scratch deployment and operations guide
 └── LICENSE                   # Apache License 2.0
@@ -275,29 +331,27 @@ scripts/build-publish.sh HEAD                       # build and validate ./publi
 
 ## Roadmap
 
-- n8n workflows: scheduled ingestion, and a chat agent that answers from
-  `/search` and cites the notes it used.
 - Graph memory built from wikilinks, backlinks and tags.
 - Sync the Obsidian vault across devices with Syncthing.
-- CI: lint, typecheck, tests and Compose validation.
+- CI: lint, typecheck, tests, workflow checks and Compose validation.
 
 ## Credits
 
 Nyansa started as a fork of the
 [n8n self-hosted AI starter kit](https://github.com/n8n-io/self-hosted-ai-starter-kit),
-released under the Apache License 2.0. The base Compose layout, the first-boot
-import logic and the demo workflow in `n8n/demo-data/` come from that project.
+released under the Apache License 2.0. The base Compose layout and the
+first-boot import of n8n come from that project.
 
 Changes made in Nyansa:
 
 - Renamed services, volumes and network under the `nyansa` namespace.
-- Added the Open WebUI service.
-- Mounted the Obsidian vault into n8n.
+- Added the Open WebUI service and the Nyansa pipe.
 - Replaced `llama3.2` with `qwen2.5:3b` and added the `nomic-embed-text`
   embedding model.
 - Replaced the default secrets in `.env.example`.
-- Replaced the encrypted demo credentials with plaintext, secret-free ones.
-- Added the security hardening, reverse proxy, backups and push-to-deploy
-  pipeline described above.
+- Replaced the demo workflow and credentials with the Nyansa workflows and
+  secret-free credentials.
+- Added the RAG service, the security hardening, reverse proxy, backups and
+  push-to-deploy pipeline described above.
 
 This project is distributed under the Apache License 2.0. See [LICENSE](LICENSE).
