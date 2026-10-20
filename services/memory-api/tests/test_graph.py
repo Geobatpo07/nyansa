@@ -263,3 +263,12 @@ def test_an_unknown_failure_keeps_the_file(tmp_path: Path) -> None:
     with pytest.raises(GraphUnavailableError, match="cannot open"):
         Graph(tmp_path / "graph.lbug").open()
     assert (tmp_path / "graph.lbug" / "data").exists()
+
+
+def test_loads_a_vault_without_links_or_tags(tmp_path: Path) -> None:
+    graph = Graph(tmp_path / "graph.lbug")
+    graph.replace(build_graph([parse_note("a.md", "# A")]))
+    assert graph.stats() == {"notes": 1, "ghosts": 0, "links": 0, "tags": 0, "orphans": 1}
+    graph.replace(build_graph([]))
+    assert graph.stats()["notes"] == 0
+    graph.close()

@@ -6,6 +6,7 @@ anything. LadybugDB takes an exclusive lock on the file: only one process
 (this service, with a single worker) opens it.
 """
 
+import contextlib
 import logging
 import posixpath
 import re
@@ -192,31 +193,36 @@ class Graph:
         """Replaces the whole graph in one transaction: readers see the old or the new graph."""
         with self._lock:
             conn = self._connection()
+            statements: list[tuple[str, list[Any]]] = [
+                ("UNWIND $rows AS r CREATE (:Note {path: r.path, title: r.title, ghost: r.ghost})", data.notes),
+                ("UNWIND $rows AS r CREATE (:Tag {name: r})", data.tags),
+                (
+                    "UNWIND $rows AS r MATCH (a:Note {path: r.source}), (b:Note {path: r.target}) "
+                    "CREATE (a)-[:LINKS_TO]->(b)",
+                    data.links,
+                ),
+                (
+                    "UNWIND $rows AS r MATCH (n:Note {path: r.note}), (t:Tag {name: r.tag}) CREATE (n)-[:TAGGED]->(t)",
+                    data.tagged,
+                ),
+                (
+                    "UNWIND $rows AS r MATCH (t:Tag {name: r.tag}), (p:Tag {name: r.parent}) "
+                    "CREATE (t)-[:SUBTAG_OF]->(p)",
+                    data.subtags,
+                ),
+            ]
             conn.execute("BEGIN TRANSACTION")
             try:
                 conn.execute("MATCH (n) DETACH DELETE n")
-                conn.execute(
-                    "UNWIND $rows AS r CREATE (:Note {path: r.path, title: r.title, ghost: r.ghost})",
-                    {"rows": data.notes},
-                )
-                conn.execute("UNWIND $rows AS r CREATE (:Tag {name: r})", {"rows": data.tags})
-                conn.execute(
-                    "UNWIND $rows AS r MATCH (a:Note {path: r.source}), (b:Note {path: r.target}) "
-                    "CREATE (a)-[:LINKS_TO]->(b)",
-                    {"rows": data.links},
-                )
-                conn.execute(
-                    "UNWIND $rows AS r MATCH (n:Note {path: r.note}), (t:Tag {name: r.tag}) CREATE (n)-[:TAGGED]->(t)",
-                    {"rows": data.tagged},
-                )
-                conn.execute(
-                    "UNWIND $rows AS r MATCH (t:Tag {name: r.tag}), (p:Tag {name: r.parent}) "
-                    "CREATE (t)-[:SUBTAG_OF]->(p)",
-                    {"rows": data.subtags},
-                )
+                for statement, rows in statements:
+                    # An empty list parameter is typed as a list of strings: skip it.
+                    if rows:
+                        conn.execute(statement, {"rows": rows})
                 conn.execute("COMMIT")
             except BaseException:
-                conn.execute("ROLLBACK")
+                # A failed statement may already have rolled the transaction back.
+                with contextlib.suppress(RuntimeError):
+                    conn.execute("ROLLBACK")
                 raise
 
     def note(self, path: str) -> dict[str, Any] | None:
