@@ -11,6 +11,7 @@ import uvicorn
 from .app import build_app
 from .clients import OllamaEmbedder, QdrantStore
 from .config import load_config
+from .graph import Graph, GraphUnavailableError
 from .ingest import Ingestor
 from .jobs import IngestJobs, JobStore
 
@@ -39,7 +40,15 @@ async def main() -> None:
     async with httpx.AsyncClient() as client:
         embedder = OllamaEmbedder(client, config.OLLAMA_URL, config.EMBEDDING_MODEL)
         store = QdrantStore(client, config.QDRANT_URL, config.QDRANT_API_KEY, config.QDRANT_COLLECTION)
-        ingestor = Ingestor(config.VAULT_PATH, embedder, store, config.CHUNK_MAX_CHARS)
+        # One process owns the graph file (LadybugDB locks it): uvicorn runs
+        # in this process, never with workers, and Compose runs one container.
+        graph = Graph(config.GRAPH_PATH)
+        try:
+            await asyncio.to_thread(graph.open)
+        except GraphUnavailableError as err:
+            # /search and /context work without it; the next use retries.
+            logging.getLogger(__name__).error("%s", err)
+        ingestor = Ingestor(config.VAULT_PATH, embedder, store, config.CHUNK_MAX_CHARS, graph)
         history = JobStore(config.STATE_PATH)
         jobs = IngestJobs(ingestor, history)
         app = build_app(
@@ -62,6 +71,8 @@ async def main() -> None:
             # A running ingestion is recorded as interrupted before the process exits.
             await jobs.stop()
             history.close()
+            # Releases the lock for the next container (deployment, rollback).
+            graph.close()
 
 
 if __name__ == "__main__":

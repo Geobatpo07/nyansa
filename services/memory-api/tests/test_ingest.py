@@ -1,13 +1,16 @@
 import asyncio
 import re
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import ClassVar
 
 import pytest
 
 from src.domain import IndexedNote, UpstreamError
-from src.ingest import IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
+from src.graph import Graph
+from src.ingest import GraphCounts, IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
 from tests.fakes import FakeEmbedder, InMemoryStore, Vault
+from tests.test_graph import hold
 
 
 class TestPlanIngest:
@@ -260,3 +263,45 @@ def test_point_id_is_a_deterministic_rfc4122_uuid_per_path_and_chunk() -> None:
 def test_embedding_text_prefixes_the_chunk_with_its_title_and_section() -> None:
     assert embedding_text("Note", "A > B", "text") == "Note > A > B\n\ntext"
     assert embedding_text("Note", "", "text") == "Note\n\ntext"
+
+
+@pytest.fixture
+def graph(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Graph]:
+    graph = Graph(tmp_path_factory.mktemp("state") / "graph.lbug")
+    yield graph
+    graph.close()
+
+
+async def test_rebuilds_the_graph_of_the_whole_vault_on_every_run(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, graph: Graph
+) -> None:
+    vault.write("Alpha.md", "# Alpha\n[[Beta]] [[Gamma]] ![[photo.png]] #projet/nyansa")
+    vault.write("notes/Beta.md", "# Beta")
+    ingestor = Ingestor(str(vault.root), embedder, store, 200, graph)
+
+    report = await ingestor.run("incremental")
+    assert report.graph == GraphCounts(notes=2, ghosts=1, links=2, tags=2)
+    assert report.graph_error is None
+
+    # Nothing to reindex, but the graph follows the vault: Gamma now exists.
+    vault.write("Gamma.md", "# Gamma")
+    embedder.fail_on = lambda text: True
+    report = await ingestor.run("incremental")
+    assert (report.notes.failed, report.graph) == (1, GraphCounts(notes=3, ghosts=0, links=2, tags=2))
+    assert [link["path"] for link in graph.note("Alpha.md")["links"]] == ["Gamma.md", "notes/Beta.md"]  # type: ignore[index]
+
+
+async def test_indexes_the_notes_when_the_graph_is_unavailable(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    vault.write("Alpha.md", "# Alpha\n[[Beta]]")
+    path = tmp_path_factory.mktemp("state") / "graph.lbug"
+    holder = hold(path)
+    try:
+        report = await Ingestor(str(vault.root), embedder, store, 200, Graph(path)).run("incremental")
+    finally:
+        holder.kill()
+        holder.wait()
+    assert (report.notes.indexed, report.graph) == (1, None)
+    assert report.graph_error is not None
+    assert "Could not set lock" in report.graph_error

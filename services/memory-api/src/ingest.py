@@ -11,8 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 from .domain import ChunkPayload, ChunkPoint, Embedder, IndexedNote, UpstreamError, VectorStore
+from .graph import Graph, build_graph
 from .markdown import chunk_note, parse_note
-from .vault import read_vault, sha256
+from .vault import NoteFile, read_vault, sha256
 
 type IngestMode = Literal["full", "incremental"]
 
@@ -48,6 +49,13 @@ class ChunkCounts(CamelModel):
     upserted: int = 0
 
 
+class GraphCounts(CamelModel):
+    notes: int
+    ghosts: int
+    links: int
+    tags: int
+
+
 class NoteError(CamelModel):
     path: str
     message: str
@@ -62,6 +70,10 @@ class IngestReport(CamelModel):
     errors: list[NoteError] = Field(default_factory=list)
     # Set when the run stopped early (upstream service unavailable).
     aborted: str | None = None
+    # The graph rebuilt from the whole vault, or why it could not be: the
+    # notes are indexed either way.
+    graph: GraphCounts | None = None
+    graph_error: str | None = None
 
 
 class IngestInProgressError(Exception):
@@ -103,8 +115,10 @@ class Ingestor:
         embedder: Embedder,
         store: VectorStore,
         max_chars: int,
+        graph: Graph | None = None,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
+        self._graph = graph
         self._vault_path = vault_path
         self._embedder = embedder
         self._store = store
@@ -187,6 +201,9 @@ class Ingestor:
             except Exception as err:
                 report.errors.append(NoteError(path=path, message=str(err)))
 
+        if self._graph is not None:
+            await self._rebuild_graph(self._graph, list(notes.values()), report)
+
         report.duration_ms = int((self._now() - started).total_seconds() * 1000)
         log.info("ingestion finished: %s", report.model_dump_json(include={"mode", "notes", "chunks"}))
         return report
@@ -234,6 +251,23 @@ class Ingestor:
         await self._store.delete_note(path, len(chunks))
         await self._store.upsert_chunks(points[:1])
         return len(points)
+
+    async def _rebuild_graph(self, graph: Graph, notes: list[NoteFile], report: IngestReport) -> None:
+        """Rebuilds the graph from every note of the vault, whatever the indexing did."""
+
+        def rebuild() -> GraphCounts:
+            data = build_graph([parse_note(note.path, note.content) for note in notes])
+            graph.replace(data)
+            ghosts = sum(note["ghost"] for note in data.notes)
+            return GraphCounts(
+                notes=len(data.notes) - ghosts, ghosts=ghosts, links=len(data.links), tags=len(data.tags)
+            )
+
+        try:
+            report.graph = await asyncio.to_thread(rebuild)
+        except Exception as err:
+            report.graph_error = str(err)
+            log.warning("the graph was not rebuilt: %s", err)
 
     async def _ensure_collection(self) -> None:
         if self._collection_ready:
