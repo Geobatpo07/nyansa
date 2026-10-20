@@ -436,6 +436,18 @@ about 2 chunks per second: count roughly 15 to 20 minutes per 500 notes. It
 runs in the background; `/ingest/status` shows its progress. Later
 incremental runs, every 30 minutes, only process the changed notes.
 
+At its end, the ingestion rebuilds the graph of the vault (`report.graph` in
+`/ingest/status`). Check it, and compare the backlinks of one of your notes
+with Obsidian's graph view:
+
+```bash
+docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/graph/stats \
+  -H "authorization: Bearer $TOKEN"
+# {"notes":512,"ghosts":37,"links":1480,"tags":64,"orphans":41}
+docker exec nyansa-open-webui curl -s -G http://nyansa-memory-api:8080/graph/notes \
+  --data-urlencode "path=Projets/Nyansa.md" -H "authorization: Bearer $TOKEN"
+```
+
 Calibrate the chat on your vault: ask `/search` 3 or 4 questions your notes
 answer and 2 they do not, and compare the best `score` of each. The chat
 keeps the notes above `CONTEXT_MIN_SCORE` (0.65 by default): set it in `.env`
@@ -459,7 +471,8 @@ Open WebUI, Caddy and Tailscale volumes, a manifest and checksums. The
 services writing to those volumes are stopped for a few seconds during the
 copy. Downloaded models are left out (the Ollama volume and Open WebUI's
 `cache/`, about 1 GB): they are fetched again after a restore, which needs
-internet access. Backups are kept 14 days (`BACKUP_RETENTION_DAYS`). They are not
+internet access. The memory-api state volume (ingestion history, graph) is
+left out too: the next ingestion rebuilds the graph from the vault. Backups are kept 14 days (`BACKUP_RETENTION_DAYS`). They are not
 encrypted and include chat history: copy them off the server to an encrypted
 destination (for example `restic`), together with a copy of `.env`.
 
@@ -497,6 +510,15 @@ docker compose -p nyansa --profile cpu --profile public up -d --remove-orphans  
 A newer n8n may have migrated its database. If the older version refuses to
 start, restore the backup taken before the faulty deployment (its timestamp
 is in the deployment log).
+
+The graph of memory-api needs nothing. Its file is locked by the one
+memory-api process; Compose stops the old container before starting the new
+one, on a deployment as on a rollback, so the new one always gets the lock.
+If an older release's LadybugDB cannot read the file, memory-api deletes
+the graph file (only it) and starts with an empty graph: run `POST /ingest`
+to rebuild it now rather than at the next scheduled run. If `/graph/stats`
+answers `503`, its `detail` gives the reason; a lock held by another process
+is never resolved by deleting the file.
 
 The next `git push prod main` deploys the pushed commit again.
 

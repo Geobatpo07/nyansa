@@ -4,10 +4,12 @@ Python service that turns the Obsidian vault into a searchable memory:
 it parses the notes, splits them along their headings, embeds the chunks with
 `nomic-embed-text` (Ollama) and stores them in Qdrant with their metadata.
 `/search` returns the most relevant chunks with the note they come from, and
-`/context` prepares them for a chat answer that cites its notes.
+`/context` prepares them for a chat answer that cites its notes. Each
+ingestion also rebuilds a graph of the vault (links, backlinks, tags), served
+by `/graph/*`.
 
-Python 3.14, asyncio, FastAPI, Pydantic, httpx, SQLite; pytest, ruff, mypy
-(strict); dependencies locked with uv.
+Python 3.14, asyncio, FastAPI, Pydantic, httpx, SQLite, LadybugDB; pytest,
+ruff, mypy (strict); dependencies locked with uv, with their hashes.
 
 ## API
 
@@ -79,11 +81,17 @@ task ends, `finishedAt` is set and `status` is:
     "durationMs": 2290,
     "notes": { "scanned": 4, "indexed": 4, "unchanged": 0, "deleted": 0, "failed": 0, "skipped": 0 },
     "chunks": { "upserted": 6 },
-    "errors": []
+    "errors": [],
+    "graph": { "notes": 4, "ghosts": 1, "links": 5, "tags": 7 },
+    "graphError": null
   },
   "error": null
 }
 ```
+
+`report.graph` counts the graph rebuilt at the end of the run, from every note
+of the vault (even when no note changed). When the graph cannot be rebuilt,
+`graph` is `null` and `graphError` says why; the notes are indexed anyway.
 
 `/ingest/status` returns `{ "current": <running task or null>, "recent": [<20 latest tasks>] }`.
 
@@ -151,7 +159,10 @@ notes are numbered by their best chunk, and the context stays under
     { "n": 1, "path": "Recettes/Pain au levain.md", "title": "Pain au levain",
       "sections": ["Pain au levain > Fermentation"], "score": 0.751 }
   ],
-  "context": "<note number=\"1\">\nSection: Pain au levain > Fermentation\nPointage de 4 heures ...\n</note>"
+  "context": "<note number=\"1\">\nSection: Pain au levain > Fermentation\nPointage de 4 heures ...\n</note>",
+  "related": [
+    { "path": "Recettes/Levain.md", "title": "Levain", "linkedTo": [1] }
+  ]
 }
 ```
 
@@ -160,8 +171,68 @@ threshold: the caller can then say that no note is relevant instead of letting
 the model invent. Each note is wrapped in a `<note number="n">` tag: with
 `qwen2.5:3b`, numbered headers were copied into the answers, tags are not.
 
+`related` lists up to 5 notes the graph links to or from the sources
+(`linkedTo`: their numbers), sources excluded, the notes linked to the most
+sources first. They are meant to be shown under the answer and are **not** in
+`context`: giving them to the model is deferred until its effect is measured
+on a set of reference questions. Without the graph, `related` is empty and
+the rest of the answer is unchanged.
+
 Errors: `400` invalid body, `401` missing or wrong token, `413` body over
 64 KiB, `502` Ollama or Qdrant failure.
+
+### `GET /graph/notes?path=`
+
+A note of the graph, by its vault path, passed as a query parameter (encoded:
+`?path=Sport/Course%20%C3%A0%20pied.md`; `curl -G --data-urlencode` does it).
+
+```json
+{
+  "path": "Projets/Nyansa.md",
+  "title": "Nyansa",
+  "ghost": false,
+  "tags": ["projet/nyansa"],
+  "links": [
+    { "path": "Infra/Docker.md", "title": "Docker", "ghost": false },
+    { "path": "Plus tard.md", "title": "Plus tard", "ghost": true }
+  ],
+  "backlinks": [{ "path": "Index.md", "title": "Index", "ghost": false }],
+  "related": [{ "path": "Infra/Backup.md", "title": "Backup", "sharedTags": ["projet"] }]
+}
+```
+
+- `ghost`: the target of a link to a note that does not exist yet. Ghosts can
+  be requested too, by their path (`Plus tard.md`).
+- `related`: up to 10 notes sharing a tag with this one, parent tags
+  included (`projet/nyansa` and `projet/sport` share `projet`), the most
+  shared tags first.
+
+### `GET /graph/neighbors?path=&depth=1|2`
+
+The notes within `depth` links of a note (default 1), following links in
+both directions, and the links between them, for a graph view:
+
+```json
+{
+  "path": "Infra/Docker.md",
+  "depth": 1,
+  "nodes": [{ "path": "Infra/Backup.md", "title": "Backup", "ghost": false }, "..."],
+  "edges": [{ "source": "Infra/Docker.md", "target": "Infra/Backup.md" }, "..."]
+}
+```
+
+### `GET /graph/stats`
+
+```json
+{ "notes": 512, "ghosts": 37, "links": 1480, "tags": 64, "orphans": 41 }
+```
+
+`orphans`: existing notes that link to no note and that no note links to (a
+link to a ghost counts as a link).
+
+Errors of the `/graph` routes: `400` missing or invalid parameter, `404`
+unknown note, `503` graph unavailable (see [Graph](#graph)), with the reason
+in `detail`. The other routes never depend on the graph.
 
 ## How it works
 
@@ -207,6 +278,56 @@ flowchart LR
   client; tests use in-memory fakes. The vault is read in a worker thread so
   `/health` keeps answering during an ingestion.
 
+### Graph
+
+`src/graph.py` keeps the graph in an embedded [LadybugDB](https://ladybugdb.com)
+file (`GRAPH_PATH`, on the state volume), queried in Cypher:
+
+```mermaid
+flowchart LR
+    note(("Note<br/>path, title, ghost")) -- LINKS_TO --> other(("Note"))
+    note -- TAGGED --> tag(("Tag<br/>projet/nyansa"))
+    tag -- SUBTAG_OF --> parent(("Tag<br/>projet"))
+```
+
+- **Rebuilt, not updated.** At the end of every ingestion, every note of the
+  vault is parsed again and the graph is replaced in one transaction (1.2 s
+  for 2,000 notes and 6,000 links). A renamed or deleted note changes the
+  resolution of the links pointing to it, so rebuilding is simpler and always
+  right. Readers see the old graph or the new one, never a mix.
+- **Links are resolved like Obsidian.** `[[Name]]` targets the note
+  `Name.md` wherever it is, ignoring case and Unicode normalization (macOS
+  writes accents decomposed); when several notes share the name, the shortest
+  path wins. `[[folder/Name]]` targets that path, or the shortest path ending
+  with it. `#heading`, `|alias` and `![[embeds]]` of notes link to the note. A
+  Markdown link `[text](folder/Name.md)` (or `<folder/Name with spaces.md>`,
+  or `%20`-encoded) is resolved from the note's folder, then from the vault
+  root, then by name. Links inside code blocks and inline code are ignored.
+- **Ghosts and attachments.** A link to a missing note creates a ghost note,
+  the way Obsidian shows notes to write. A link to a file that is not a note
+  (`![[image.png]]`, `[[doc.pdf]]`, any target with a file extension, and any
+  Markdown link not ending in `.md`) creates nothing.
+- **One owner.** LadybugDB locks the file: only one process can open it.
+  memory-api runs a single uvicorn process (no workers) in a single container
+  (`scripts/check-exposure.sh` refuses a scaled service). The graph is closed
+  on shutdown, and Compose stops the old container before starting the new one
+  on a deployment or a rollback. After a crash or a SIGKILL, the kernel
+  releases the lock with the process, and LadybugDB replays its write-ahead
+  log on the next open.
+- **Unavailable or unreadable.** Opening the graph can fail for two kinds of
+  reasons, told apart by LadybugDB's message:
+  - the file is **unreadable** (not a LadybugDB file, damaged pages or log,
+    written by another LadybugDB version): the graph file and its own `.wal`
+    and `.shadow` files are deleted, never anything else in `/state`, and an
+    empty graph is created; the next ingestion fills it;
+  - anything else, first of all the **lock held by another process**, but
+    also a permission error or an unknown message: nothing is deleted, the
+    `/graph` routes answer `503` and the next call tries again.
+
+  Only messages known to mean damage lead to a deletion, so a new LadybugDB
+  message is treated as "unavailable", never as "unreadable". The tests open
+  the graph from a second process to check that a held lock never deletes it.
+
 ## Configuration
 
 | Variable | Default | |
@@ -220,6 +341,7 @@ flowchart LR
 | `CHUNK_MAX_CHARS` | `1500` | 200 to 8000; changing it reindexes all notes |
 | `VAULT_PATH` | `/vault` | Mounted read-only |
 | `STATE_PATH` | `/state/memory-api.db` | SQLite file of the ingestion tasks, on a writable volume |
+| `GRAPH_PATH` | `/state/graph.lbug` | LadybugDB file of the graph, on the same volume; rebuilt from the vault |
 | `CONTEXT_MIN_SCORE` | `0.65` | `/context`: minimum similarity of a relevant chunk (-1 to 1) |
 | `CONTEXT_MAX_CHARS` | `6000` | `/context`: maximum size of the text given to the model |
 | `MEMORY_API_PORT` | `8080` | |
@@ -277,3 +399,15 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/sear
   a small French vault: relevant questions scored 0.68 to 0.76, unrelated ones
   up to 0.65. Check it on your own vault with `/search` and adjust it: raise it
   if answers cite unrelated notes, lower it if relevant notes are missed.
+- Graph: a note name with a dot followed by letters (`[[Node.js]]`) looks like
+  a file name, so a link to it creates no ghost while the note does not
+  exist; once it exists, the link resolves normally. Markdown links are taken
+  as note links only when they end in `.md`, and reference-style links
+  (`[text][ref]`) are not read. Only fenced and inline code is skipped: a link
+  in an indented code block counts. One link is kept per pair of notes,
+  without its heading or alias.
+- Graph: the `/graph` routes wait while the graph is rebuilt (about a second).
+  A new or empty graph file stays empty until the next ingestion (every 30
+  minutes, or `POST /ingest`). LadybugDB is still in 0.x: a version that
+  cannot read the file is handled as an unreadable file, rebuilt by the next
+  ingestion.
