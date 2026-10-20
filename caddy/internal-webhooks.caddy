@@ -1,0 +1,5 @@
+# n8n webhooks that only the internal network calls (the Open WebUI chat
+# pipe reaches n8n directly): refused at the proxy, on top of their own
+# Header Auth.
+@internalWebhooks path /webhook/nyansa-chat /webhook/nyansa-chat/* /webhook-test/nyansa-chat /webhook-test/nyansa-chat/*
+respond @internalWebhooks 404
