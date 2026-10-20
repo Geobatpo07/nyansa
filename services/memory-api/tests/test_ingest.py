@@ -1,13 +1,16 @@
 import asyncio
 import re
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import ClassVar
 
 import pytest
 
 from src.domain import IndexedNote, UpstreamError
-from src.ingest import IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
+from src.graph import Graph
+from src.ingest import GraphCounts, IngestInProgressError, Ingestor, embedding_text, plan_ingest, point_id
 from tests.fakes import FakeEmbedder, InMemoryStore, Vault
+from tests.test_graph import hold
 
 
 class TestPlanIngest:
@@ -260,3 +263,76 @@ def test_point_id_is_a_deterministic_rfc4122_uuid_per_path_and_chunk() -> None:
 def test_embedding_text_prefixes_the_chunk_with_its_title_and_section() -> None:
     assert embedding_text("Note", "A > B", "text") == "Note > A > B\n\ntext"
     assert embedding_text("Note", "", "text") == "Note\n\ntext"
+
+
+@pytest.fixture
+def graph(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Graph]:
+    graph = Graph(tmp_path_factory.mktemp("state") / "graph.lbug")
+    yield graph
+    graph.close()
+
+
+async def test_rebuilds_the_graph_of_the_whole_vault_on_every_run(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, graph: Graph
+) -> None:
+    vault.write("Alpha.md", "# Alpha\n[[Beta]] [[Gamma]] ![[photo.png]] #projet/nyansa")
+    vault.write("notes/Beta.md", "# Beta")
+    ingestor = Ingestor(str(vault.root), embedder, store, 200, graph)
+
+    report = await ingestor.run("incremental")
+    assert report.graph == GraphCounts(notes=2, ghosts=1, links=2, tags=2)
+    assert report.graph_error is None
+
+    # Nothing to reindex, but the graph follows the vault: Gamma now exists.
+    vault.write("Gamma.md", "# Gamma")
+    embedder.fail_on = lambda text: True
+    report = await ingestor.run("incremental")
+    assert (report.notes.failed, report.graph) == (1, GraphCounts(notes=3, ghosts=0, links=2, tags=2))
+    assert [link["path"] for link in graph.note("Alpha.md")["links"]] == ["Gamma.md", "notes/Beta.md"]  # type: ignore[index]
+
+
+async def test_indexes_the_notes_when_the_graph_is_unavailable(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    vault.write("Alpha.md", "# Alpha\n[[Beta]]")
+    path = tmp_path_factory.mktemp("state") / "graph.lbug"
+    holder = hold(path)
+    try:
+        report = await Ingestor(str(vault.root), embedder, store, 200, Graph(path)).run("incremental")
+    finally:
+        holder.kill()
+        holder.wait()
+    assert (report.notes.indexed, report.graph) == (1, None)
+    assert report.graph_error is not None
+    assert "Could not set lock" in report.graph_error
+
+
+async def test_builds_a_missing_or_empty_graph_at_startup_without_ollama_or_qdrant(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, graph: Graph
+) -> None:
+    vault.write("Alpha.md", "# Alpha\n[[Beta]] #projet")
+    vault.write("notes/Beta.md", "# Beta")
+    ingestor = Ingestor(str(vault.root), embedder, store, 200, graph)
+
+    # No graph file yet: built from the vault alone, nothing embedded or stored.
+    assert await ingestor.build_graph_if_empty() == GraphCounts(notes=2, ghosts=0, links=1, tags=1)
+    assert (embedder.documents_embedded, store.points) == (0, {})
+
+    # Already built: left as it is, even if the vault changed since.
+    vault.write("Gamma.md", "# Gamma")
+    assert await ingestor.build_graph_if_empty() is None
+    assert graph.stats()["notes"] == 2
+
+
+async def test_builds_the_graph_at_startup_after_an_unreadable_file_was_recreated(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    vault.write("Alpha.md", "# Alpha")
+    path = tmp_path_factory.mktemp("state") / "graph.lbug"
+    path.write_bytes(b"not a graph" * 1000)
+    graph = Graph(path)
+    try:
+        built = await Ingestor(str(vault.root), embedder, store, 200, graph).build_graph_if_empty()
+        assert built == GraphCounts(notes=1, ghosts=0, links=0, tags=0)
+    finally:
+        graph.close()

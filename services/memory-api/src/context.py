@@ -1,5 +1,7 @@
 """Context for a chat answer: the relevant chunks grouped by note, with numbered sources to cite."""
 
+from pydantic import Field
+
 from .domain import SearchHit
 from .ingest import CamelModel
 
@@ -15,6 +17,13 @@ class Source(CamelModel):
     score: float
 
 
+class RelatedNote(CamelModel):
+    path: str
+    title: str
+    # Numbers of the sources this note links to or is linked from.
+    linked_to: list[int]
+
+
 class Context(CamelModel):
     query: str
     # False when no chunk passed the relevance threshold: there is nothing to answer from.
@@ -23,6 +32,9 @@ class Context(CamelModel):
     # Text given to the model: each note in a <note number="n"> tag with its quoted chunks.
     # Small models follow tags better than headers, and do not copy them into the answer.
     context: str
+    # Notes linked to the sources in the graph, to list under the answer. Never
+    # given to the model: their effect on answers has not been measured.
+    related: list[RelatedNote] = Field(default_factory=list)
 
 
 def build_context(query: str, hits: list[SearchHit], max_chars: int) -> Context:

@@ -5,7 +5,7 @@ protocols; the Ollama and Qdrant adapters implement them, and tests use
 in-memory fakes.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Protocol, TypedDict
 
 type Service = Literal["ollama", "qdrant"]
@@ -38,6 +38,8 @@ class ParsedNote:
     body: str
     # Set when the frontmatter could not be parsed; the note is still indexed.
     frontmatter_error: str | None = None
+    # Targets of `[text](target)` links, as written (URLs included), deduplicated.
+    markdown_links: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

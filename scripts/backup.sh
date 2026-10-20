@@ -8,7 +8,8 @@
 # SQLite files (Open WebUI) and Qdrant segments are consistent, then
 # restarted. Downloaded models are not backed up, they are fetched again:
 # the Ollama volume and Open WebUI's cache/ (embedding and Whisper models,
-# about 1 GB).
+# about 1 GB). The graph of memory-api is left out too: it is rebuilt from
+# the vault when memory-api starts.
 # The .env file is NOT included; keep a copy of it (and N8N_ENCRYPTION_KEY)
 # somewhere else, or the n8n credentials cannot be decrypted after a restore.
 #
@@ -34,10 +35,14 @@ VOLUMES=(
 	nyansa_openwebui_storage
 	nyansa_caddy_data
 	nyansa_tailscale_state
+	nyansa_memory_api_state
 )
 # Paths (relative to the volume root) left out of each archive.
 declare -A EXCLUDES=(
 	[nyansa_openwebui_storage]=./cache
+	# The graph file (graph.lbug) and its .wal and .shadow files; the
+	# ingestion history (memory-api.db) is kept.
+	[nyansa_memory_api_state]='./graph.lbug*'
 )
 # Containers writing to those volumes, in stop order (proxies first).
 # They are restarted in reverse order.
@@ -45,6 +50,7 @@ WRITERS=(
 	nyansa-caddy-public
 	nyansa-caddy-tailscale
 	nyansa-n8n
+	nyansa-memory-api
 	nyansa-open-webui
 	nyansa-qdrant
 	nyansa-tailscale

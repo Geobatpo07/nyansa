@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -8,9 +8,11 @@ import pytest
 
 from src.app import build_app
 from src.domain import UpstreamError
+from src.graph import Graph
 from src.ingest import Ingestor
 from src.jobs import IngestJobs, JobStore
 from tests.fakes import FakeEmbedder, InMemoryStore, Vault
+from tests.test_graph import hold
 
 TOKEN = "t" * 32
 AUTH = {"authorization": f"Bearer {TOKEN}"}
@@ -27,16 +29,24 @@ def store() -> InMemoryStore:
 
 
 @pytest.fixture
+def graph(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Graph]:
+    graph = Graph(tmp_path_factory.mktemp("state") / "graph.lbug")
+    yield graph
+    graph.close()
+
+
+@pytest.fixture
 async def client(
-    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, tmp_path: Path
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, graph: Graph, tmp_path: Path
 ) -> AsyncIterator[httpx.AsyncClient]:
     vault.write(
         "Docker.md", "---\ntags: [infra]\n---\n# Docker\n## Compose\nDocker compose runs the stack with profiles."
     )
     vault.write("Cooking.md", "# Cooking\nA recipe for bread with flour and water.")
+    vault.write("Sport/Course à pied.md", "# Course à pied\nUne sortie longue. [[Docker]] [[Cooking]] [[Plus tard]]")
     history = JobStore(tmp_path / "state" / "jobs.db")
-    jobs = IngestJobs(Ingestor(str(vault.root), embedder, store, 500), history)
-    app = build_app(TOKEN, jobs, history, embedder, store)
+    jobs = IngestJobs(Ingestor(str(vault.root), embedder, store, 500, graph), history)
+    app = build_app(TOKEN, jobs, history, embedder, store, graph)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://memory-api") as client:
         yield client
     await jobs.stop()
@@ -71,6 +81,9 @@ async def test_rejects_requests_without_the_token(client: httpx.AsyncClient, hea
         ("POST", "/ingest"),
         ("GET", "/ingest/status"),
         ("GET", "/ingest/status/00000000-0000-4000-8000-000000000000"),
+        ("GET", "/graph/notes?path=Docker.md"),
+        ("GET", "/graph/neighbors?path=Docker.md"),
+        ("GET", "/graph/stats"),
         ("GET", "/openapi.json"),
         ("GET", "/unknown"),
     ]:
@@ -112,12 +125,13 @@ async def test_ingest_starts_a_background_ingestion_and_points_to_its_state(clie
 
     done = await finished(client, response.headers["location"])
     assert (done["status"], done["error"]) == ("completed", None)
-    assert done["progress"] == {"total": 2, "done": 2}
-    assert (done["report"]["notes"]["scanned"], done["report"]["notes"]["indexed"]) == (2, 2)
+    assert done["progress"] == {"total": 3, "done": 3}
+    assert (done["report"]["notes"]["scanned"], done["report"]["notes"]["indexed"]) == (3, 3)
+    assert done["report"]["graph"] == {"notes": 3, "ghosts": 1, "links": 3, "tags": 1}
     assert done["finishedAt"] is not None
 
     again = await ingest(client, "full")
-    assert (again["mode"], again["report"]["notes"]["indexed"], again["report"]["notes"]["unchanged"]) == ("full", 2, 0)
+    assert (again["mode"], again["report"]["notes"]["indexed"], again["report"]["notes"]["unchanged"]) == ("full", 3, 0)
 
 
 async def test_ingest_accepts_a_json_content_type_with_an_empty_body(client: httpx.AsyncClient) -> None:
@@ -265,13 +279,22 @@ async def test_context_returns_numbered_sources_and_the_text_to_quote(client: ht
         ["Docker > Compose"],
     )
     assert body["context"].startswith('<note number="1">\nSection: Docker > Compose\nDocker compose runs')
+    # The note linking to the source is listed, not quoted.
+    assert body["related"] == [{"path": "Sport/Course à pied.md", "title": "Course à pied", "linkedTo": [1]}]
+    assert "Course" not in body["context"]
 
 
 async def test_context_is_not_found_below_the_relevance_threshold(client: httpx.AsyncClient) -> None:
     await ingest(client)
     # The fake embedder shares no word with this question: every score is 0, under the default 0.65.
     response = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics"})
-    assert response.json() == {"query": "quantum chromodynamics", "found": False, "sources": [], "context": ""}
+    assert response.json() == {
+        "query": "quantum chromodynamics",
+        "found": False,
+        "sources": [],
+        "context": "",
+        "related": [],
+    }
 
     relaxed = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics", "minScore": -1})
     assert relaxed.json()["found"] is True
@@ -280,3 +303,65 @@ async def test_context_is_not_found_below_the_relevance_threshold(client: httpx.
 async def test_context_validates_its_body(client: httpx.AsyncClient) -> None:
     for body in ({}, {"query": "x", "limit": 21}, {"query": "x", "extra": 1}):
         assert (await client.post("/context", headers=AUTH, json=body)).status_code == 400
+
+
+async def test_graph_routes_take_the_note_path_as_a_query_parameter(client: httpx.AsyncClient) -> None:
+    await ingest(client)
+
+    note = await client.get("/graph/notes", params={"path": "Sport/Course à pied.md"}, headers=AUTH)
+    assert note.status_code == 200
+    assert [(n["path"], n["ghost"]) for n in note.json()["links"]] == [
+        ("Cooking.md", False),
+        ("Docker.md", False),
+        ("Plus tard.md", True),
+    ]
+    # Percent-encoded by hand, as curl or n8n send it.
+    encoded = await client.get("/graph/notes?path=Sport%2FCourse%20%C3%A0%20pied.md", headers=AUTH)
+    assert encoded.json() == note.json()
+
+    around = await client.get("/graph/neighbors", params={"path": "Docker.md", "depth": 2}, headers=AUTH)
+    assert {n["path"] for n in around.json()["nodes"]} == {
+        "Docker.md",
+        "Sport/Course à pied.md",
+        "Cooking.md",
+        "Plus tard.md",
+    }
+
+    stats = await client.get("/graph/stats", headers=AUTH)
+    assert stats.json() == {"notes": 3, "ghosts": 1, "links": 3, "tags": 1, "orphans": 0}
+
+
+async def test_graph_routes_answer_404_for_an_unknown_note_and_400_for_bad_parameters(
+    client: httpx.AsyncClient,
+) -> None:
+    for url in ("/graph/notes", "/graph/neighbors"):
+        unknown = await client.get(url, params={"path": "Missing.md"}, headers=AUTH)
+        assert (unknown.status_code, unknown.json()) == (404, {"error": "unknown note"})
+        assert (await client.get(url, headers=AUTH)).status_code == 400
+        assert (await client.get(url, params={"path": ""}, headers=AUTH)).status_code == 400
+    too_deep = await client.get("/graph/neighbors", params={"path": "Docker.md", "depth": 3}, headers=AUTH)
+    assert (too_deep.status_code, too_deep.json()["issues"][0]["path"]) == (400, "depth")
+
+
+async def test_only_the_graph_routes_fail_when_the_graph_is_unavailable(
+    client: httpx.AsyncClient, graph: Graph
+) -> None:
+    await ingest(client)
+    graph.close()
+    holder = hold(graph._path)
+    try:
+        for url in ("/graph/stats", "/graph/notes?path=Docker.md", "/graph/neighbors?path=Docker.md"):
+            response = await client.get(url, headers=AUTH)
+            assert response.status_code == 503, url
+            assert response.json()["error"] == "graph unavailable"
+            assert "Could not set lock" in response.json()["detail"]
+        search = await client.post("/search", headers=AUTH, json={"query": "docker compose"})
+        assert (search.status_code, search.json()["results"][0]["path"]) == (200, "Docker.md")
+        context = await client.post("/context", headers=AUTH, json={"query": "docker compose stack profiles"})
+        assert (context.status_code, context.json()["found"], context.json()["related"]) == (200, True, [])
+        assert (await client.get("/health")).status_code == 200
+    finally:
+        holder.kill()
+        holder.wait()
+    # Once the lock is released, the next call opens the graph again.
+    assert (await client.get("/graph/stats", headers=AUTH)).status_code == 200

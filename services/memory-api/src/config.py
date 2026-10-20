@@ -25,6 +25,9 @@ class Config(BaseModel):
     VAULT_PATH: str = Field("/vault", min_length=1)
     # SQLite file of the ingestion tasks, in a writable volume.
     STATE_PATH: str = Field("/state/memory-api.db", min_length=1)
+    # LadybugDB file of the graph, in the same volume. Derived from the vault:
+    # deleted and rebuilt when unreadable.
+    GRAPH_PATH: str = Field("/state/graph.lbug", min_length=1)
     OLLAMA_URL: Url = "http://nyansa-ollama:11434"
     EMBEDDING_MODEL: str = Field("nomic-embed-text", min_length=1)
     QDRANT_URL: Url = "http://nyansa-qdrant:6333"

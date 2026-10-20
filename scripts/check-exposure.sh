@@ -8,6 +8,7 @@
 #   - PostgreSQL, Qdrant, Ollama and memory-api publish no port at all;
 #   - no container is privileged or uses the host network;
 #   - memory-api mounts the vault read-only, and no other service mounts it.
+#   - memory-api runs as one container: it owns the lock of the graph file.
 # Each combination must also pass `docker compose config`.
 #
 # Usage: scripts/check-exposure.sh [--file docker-compose.yml] [--env-file .env]
@@ -64,6 +65,11 @@ read -r -d '' RULES <<'JQ' || true
   | select($name != "nyansa-memory-api")
   | ($svc.volumes // [])[] | select(.source == $vault)
   | "\($name): only memory-api may mount the vault"
+),
+(
+  select($name == "nyansa-memory-api")
+  | select($svc.container_name != $name or ($svc.deploy.replicas // 1) > 1 or ($svc.scale // 1) > 1)
+  | "\($name): must run as one container named \($name) (it owns the graph file lock)"
 )
 JQ
 

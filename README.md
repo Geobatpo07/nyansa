@@ -14,7 +14,14 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
 
 - **Chat with your notes, with sources.** In Open WebUI, the "Nyansa" model
   answers from the notes of your vault and lists the notes it used (path and
-  title). When no note is relevant, it says so instead of answering.
+  title). When no note is relevant, it says so instead of answering. Under the
+  sources, "Notes liées" lists the notes your links connect to them.
+- **Graph memory.** At every ingestion, memory-api rebuilds a graph of the
+  vault in an embedded [LadybugDB](https://ladybugdb.com) file: notes,
+  `[[wikilinks]]` and Markdown links resolved like Obsidian, backlinks, links
+  to notes not written yet, and tags with their parents (`#projet/nyansa` is
+  under `#projet`). `/graph/*` returns a note's links, backlinks and related
+  notes, its neighbourhood, and vault statistics.
 - **RAG over the vault (`memory-api`).** A Python service parses the notes
   (frontmatter, tags, `[[wikilinks]]`), splits them along their headings,
   embeds them with `nomic-embed-text` and stores them in Qdrant with their
@@ -36,7 +43,8 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
   release folder, backs up, deploys, waits for health and switches only on
   success. The previous release is restarted otherwise.
 - **Backups.** Scripts to back up and restore the PostgreSQL database and every
-  stateful volume, with checksums and retention.
+  stateful volume, with checksums and retention. Derived data (the graph,
+  downloaded models) is left out and rebuilt.
 - **Verifiable rules.** Scripts check the port exposure of all 9 profile
   combinations, refuse tracked secrets and check that every n8n webhook has
   its own authentication.
@@ -63,8 +71,8 @@ flowchart LR
             pg[("nyansa-postgres<br/>n8n state")]
             qdrant[("nyansa-qdrant<br/>vector store, API key")]
             ollama["nyansa-ollama<br/>qwen2.5:3b, nomic-embed-text"]
-            memory["nyansa-memory-api<br/>Python RAG service<br/>/ingest, /context, /search"]
-            state[("SQLite<br/>ingestion tasks")]
+            memory["nyansa-memory-api<br/>Python RAG service<br/>/ingest, /context, /search, /graph"]
+            state[("state volume<br/>SQLite: ingestion tasks<br/>LadybugDB: graph")]
         end
     end
 
@@ -97,11 +105,11 @@ sequenceDiagram
     You->>W: question
     W->>N: POST /webhook/nyansa-chat (X-Nyansa-Token)
     N->>M: POST /context (bearer token)
-    M-->>N: numbered notes, or found = false
+    M-->>N: numbered notes + notes linked to them (graph), or found = false
     alt a note is relevant
         N->>O: notes + question, cite with [n]
         O-->>N: answer
-        N->>N: keep valid [n], list the cited notes
+        N->>N: keep valid [n], list the cited notes and their linked notes
     else nothing relevant
         N->>N: "no relevant note"
     end
@@ -125,7 +133,7 @@ hardware profile.
 | Open WebUI | `ghcr.io/open-webui/open-webui:v0.7.2` | Browser chat interface, with the Nyansa pipe (`open-webui/`) |
 | Caddy | `caddy:2.11.4-alpine` | Reverse proxy, automatic HTTPS |
 | Tailscale | `tailscale/tailscale:v1.102.5` | Private access (tailscale profile) |
-| memory-api | built from `services/memory-api` (Python 3.14, FastAPI, asyncio, SQLite) | Vault ingestion, semantic search, chat context |
+| memory-api | built from `services/memory-api` (Python 3.14, FastAPI, asyncio, SQLite, LadybugDB) | Vault ingestion, semantic search, chat context, graph of the vault |
 | `qwen2.5:3b` | Ollama model | Chat model |
 | `nomic-embed-text` | Ollama model | Embedding model |
 
@@ -140,7 +148,8 @@ needs authentication over HTTPS, and that no secret lives in the repository.
 | Measure | Where |
 |---|---|
 | PostgreSQL, Qdrant, Ollama and memory-api publish no port; they are only reachable on the internal `nyansa` network. | `docker-compose.yml` |
-| memory-api requires a bearer token (constant-time comparison), runs as a non-root user with a read-only root filesystem, no Linux capabilities and a read-only vault mount; its only writable path is the volume of its SQLite state. | `docker-compose.yml`, `services/memory-api` |
+| memory-api requires a bearer token (constant-time comparison), runs as a non-root user with a read-only root filesystem, no Linux capabilities and a read-only vault mount; its only writable path is its state volume (SQLite tasks, graph file). | `docker-compose.yml`, `services/memory-api` |
+| memory-api runs as one container with one process, the only owner of the graph file lock. | `docker-compose.yml`, `scripts/check-exposure.sh` |
 | No container can write to the vault: n8n does not mount it, memory-api mounts it read-only. | `docker-compose.yml`, `scripts/check-exposure.sh` |
 | n8n and Open WebUI are bound to `127.0.0.1`; outside access goes through Caddy. | `docker-compose.yml` |
 | Docker bypasses UFW for published ports, so exposure is enforced in Compose and checked for all 9 profile combinations. | `scripts/check-exposure.sh` |
@@ -237,6 +246,8 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/inge
   -H "authorization: Bearer $TOKEN"          # 202, with the task id
 docker exec nyansa-open-webui curl -s http://nyansa-memory-api:8080/ingest/status \
   -H "authorization: Bearer $TOKEN"
+docker exec nyansa-open-webui curl -s -G http://nyansa-memory-api:8080/graph/notes \
+  --data-urlencode "path=Projets/Nyansa.md" -H "authorization: Bearer $TOKEN"   # links, backlinks, related notes
 ```
 
 Then install the chat once: in Open WebUI, *Admin Panel > Functions > +*,
@@ -288,6 +299,9 @@ scripts/check-secrets.sh HEAD                       # tracked secrets
 scripts/check-n8n-workflows.sh                      # webhook auth, credentials without secrets
 scripts/tests/check-secrets.test.sh                 # tests of the secrets scanner (throwaway Git repo)
 scripts/tests/check-n8n-workflows.test.sh           # tests of the workflow checks
+scripts/check-env.sh .env                           # variables of .env.example missing from .env (names only)
+scripts/tests/check-env.test.sh                     # tests of the env check
+scripts/tests/backup-restore.test.sh                # backup then restore (clean Docker daemon only: it refuses otherwise)
 scripts/build-publish.sh HEAD                       # build and validate ./publish
 ```
 
@@ -303,7 +317,7 @@ example, how long the sourdough proofing takes.
 ├── .env.example              # Template for secrets, URLs, profiles and paths
 ├── caddy/                    # Caddyfiles for the public and tailscale profiles, shared snippets
 ├── services/
-│   └── memory-api/           # Python RAG service: ingestion tasks, search, chat context (+ pytest)
+│   └── memory-api/           # Python RAG service: ingestion tasks, search, chat context, graph (+ pytest)
 ├── open-webui/               # Nyansa pipe for Open WebUI (+ pytest, Python 3.11)
 ├── n8n/
 │   ├── credentials/          # n8n credentials without secrets, imported when missing
@@ -313,6 +327,7 @@ example, how long the sourdough proofing takes.
 │   ├── check-exposure.sh             # Port exposure rules for every profile combination
 │   ├── check-secrets.sh              # Refuses tracked secrets
 │   ├── check-n8n-workflows.sh        # Webhook auth and secret-free credentials
+│   ├── check-env.sh                  # Variables missing from an env file (names only)
 │   ├── n8n-export.sh                 # Exports edited workflows back to n8n/workflows
 │   ├── tests/                        # Tests of the check scripts
 │   ├── build-publish.sh              # Builds a release folder from a commit
@@ -331,9 +346,12 @@ example, how long the sourdough proofing takes.
 
 ## Roadmap
 
-- Graph memory built from wikilinks, backlinks and tags.
 - Sync the Obsidian vault across devices with Syncthing.
 - CI: lint, typecheck, tests, workflow checks and Compose validation.
+- Graph-expanded context: give the model the notes linked to its sources,
+  not only list them. Deferred from the graph memory phase until its effect can
+  be measured on a set of reference questions; for now the linked notes are
+  shown to you and never sent to the model.
 
 ## Credits
 
