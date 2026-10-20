@@ -1,4 +1,4 @@
-# ADR-0008: Asynchronous ingestion with its state in SQLite
+# ADR-0012: Asynchronous ingestion with its state in SQLite
 
 - **Status:** Accepted
 - **Date:** 2026-10-20 (storage chosen on 2026-10-19)
@@ -39,7 +39,7 @@ latest). A task stopped by the service or found `running` at startup becomes
 - The note hash is written last (`b0fb263`), so an interrupted note keeps
   its old hash and is indexed again by the next run.
 - memory-api has a writable volume, its only writable path; it is backed up
-  since `dff83db` (ADR-0014).
+  since `dff83db` (ADR-0019).
 - One task at a time; the n8n workflow polls the status every minute, for 2
   hours at most, and alerts by e-mail on failure.
 

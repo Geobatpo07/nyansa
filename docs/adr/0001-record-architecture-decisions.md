@@ -35,7 +35,7 @@ in [README.md](README.md) with its status.
 - A decision that is not implemented yet has the status "Accepted —
   implementation pending". A decision replaced by another one keeps its
   file, with the status "Superseded by ADR-XXXX".
-- The first records (0002 to 0016) were written after the fact, from the Git
+- The first records (0002 to 0021) were written after the fact, from the Git
   history, the documentation and the phase plans; their dates are those of
   the decisions, not of the records.
 - ADRs follow the repository rules: no secret, domain, IP address, local

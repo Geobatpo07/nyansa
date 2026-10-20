@@ -1,4 +1,4 @@
-# ADR-0012: LadybugDB for the graph of the vault
+# ADR-0017: LadybugDB for the graph of the vault
 
 - **Status:** Accepted
 - **Date:** 2026-10-20 (merged with phase 4 in `c3a29f3`)
@@ -46,7 +46,7 @@ files); a held lock or any other error leaves it in place and makes only the
   parent.
 - Differences from the phase plan: the routes take `?path=` (spaces,
   accents, folders), not `?note=`, and `/search` is not enriched with graph
-  neighbours (ADR-0013).
+  neighbours (ADR-0018).
 
 ## References
 

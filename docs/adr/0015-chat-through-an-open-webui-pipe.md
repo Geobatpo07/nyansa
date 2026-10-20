@@ -1,4 +1,4 @@
-# ADR-0010: Chat through an Open WebUI pipe, with sources built from data
+# ADR-0015: Chat through an Open WebUI pipe, with sources built from data
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
@@ -44,7 +44,7 @@ answer is a fixed sentence and the model is not called.
   `open-webui/src/nyansa_pipe.py` must be pasted again. It targets Python
   3.11, the version Open WebUI runs.
 - The pipe sends only the last user message: each question is answered on
-  its own (see ADR-0011).
+  its own (see ADR-0016).
 
 ## References
 

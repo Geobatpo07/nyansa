@@ -1,4 +1,4 @@
-# ADR-0013: Linked notes are shown to the user, not given to the model
+# ADR-0018: Linked notes are shown to the user, not given to the model
 
 - **Status:** Accepted
 - **Date:** 2026-10-20

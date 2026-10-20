@@ -1,4 +1,4 @@
-# ADR-0003: The vault is read-only for Nyansa
+# ADR-0010: The vault is read-only for Nyansa
 
 - **Status:** Accepted
 - **Date:** 2026-09-26 (memory-api mounts it read-only); completed on
@@ -33,8 +33,8 @@ stores (Qdrant, the memory-api state volume).
 - No container can modify a note; `check-exposure.sh` fails if memory-api
   mounts `/vault` writable or if any other service mounts the vault folder,
   for every profile combination.
-- Derived data can be deleted and rebuilt from the vault (ADR-0012,
-  ADR-0014).
+- Derived data can be deleted and rebuilt from the vault (ADR-0017,
+  ADR-0019).
 - Writing to the vault, if it is ever needed, requires a new decision. The
   planned phase 6 keeps the vault read-only and limits writes to approved
   items, in one inbox folder, by a single component.

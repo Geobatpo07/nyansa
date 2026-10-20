@@ -1,4 +1,4 @@
-# ADR-0015: Conventions for the services in `services/`
+# ADR-0020: Conventions for the services in `services/`
 
 - **Status:** Accepted — implementation pending
 - **Date:** 2026-10-21
@@ -9,7 +9,7 @@ memory-api was the only service built from the repository, and the release
 tooling names it explicitly: `build-publish.sh` lists its build inputs, the
 deployment hook removes `nyansa-memory-api:<sha>` images, and
 `check-exposure.sh` has rules written for it. Phase 4b adds a second service
-(ADR-0016), and the folder is meant to hold future ones.
+(ADR-0021), and the folder is meant to hold future ones.
 
 ## Decision
 

@@ -1,4 +1,4 @@
-# ADR-0016: PDF extraction in an isolated service, doc-extractor
+# ADR-0021: PDF extraction in an isolated service, doc-extractor
 
 - **Status:** Accepted — implementation pending
 - **Date:** 2026-10-21
@@ -8,7 +8,7 @@
 Only Markdown notes are ingested; PDFs in the vault are ignored. Parsing a
 PDF means running a parser on files that may be malformed or hostile, and a
 parse can hang or exhaust memory. memory-api owns the graph file lock
-(ADR-0012) and an extraction run in one of its threads could not be
+(ADR-0017) and an extraction run in one of its threads could not be
 interrupted.
 
 ## Decision
@@ -44,7 +44,7 @@ no outbound access and no published port.
   `memory-api.db` and still reported; when the service is down, PDFs are
   skipped and retried, and notes are indexed anyway.
 - The graph gets `Document` nodes and `EMBEDS` relations from notes.
-- One more service to build, deploy and monitor (ADR-0015).
+- One more service to build, deploy and monitor (ADR-0020).
 
 ## References
 

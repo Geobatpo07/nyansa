@@ -1,4 +1,4 @@
-# ADR-0014: Back up only what cannot be rebuilt
+# ADR-0019: Back up only what cannot be rebuilt
 
 - **Status:** Accepted
 - **Date:** 2026-10-20 (models excluded since 2026-09-26)

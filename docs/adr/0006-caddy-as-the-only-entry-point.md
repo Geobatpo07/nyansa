@@ -1,4 +1,4 @@
-# ADR-0004: Caddy is the only entry point, without an API gateway
+# ADR-0006: Caddy is the only entry point, without an API gateway
 
 - **Status:** Accepted
 - **Date:** 2026-09-26

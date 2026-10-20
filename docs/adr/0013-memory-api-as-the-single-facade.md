@@ -1,4 +1,4 @@
-# ADR-0009: memory-api is the only component that touches the memory stores
+# ADR-0013: memory-api is the only component that touches the memory stores
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
@@ -32,7 +32,7 @@ network.
   `found: false` below the threshold, tested with pytest.
 - The chat and the ingestion both depend on memory-api being up; its
   `/health` also reports Ollama and Qdrant.
-- A new memory store (the graph, ADR-0012) is added behind memory-api
+- A new memory store (the graph, ADR-0017) is added behind memory-api
   without changing its clients.
 
 ## References

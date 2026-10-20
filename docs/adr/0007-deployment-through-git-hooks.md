@@ -1,4 +1,4 @@
-# ADR-0005: Deploy with Git hooks and immutable release folders
+# ADR-0007: Deploy with Git hooks and immutable release folders
 
 - **Status:** Accepted
 - **Date:** 2026-09-26

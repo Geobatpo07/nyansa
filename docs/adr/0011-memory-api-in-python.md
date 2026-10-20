@@ -1,11 +1,11 @@
-# ADR-0007: Python is the project's programming language
+# ADR-0011: Python is the project's programming language
 
 - **Status:** Accepted
 - **Date:** 2026-10-19 (merged in `2ec02cc`)
 
 ## Context
 
-After phase 2, memory-api was a TypeScript service (ADR-0006) merged in
+After phase 2, memory-api was a TypeScript service (ADR-0008) merged in
 `main`. The phase 3 plan, not yet started, added more code: asynchronous
 ingestion, a `/context` route for the chat and, as the recommended chat
 option, an Open WebUI pipe, which Open WebUI runs in Python. The Qdrant index
@@ -42,7 +42,7 @@ and dependencies locked with uv; the TypeScript code was removed.
   was reindexed.
 - One application language for memory-api and the Open WebUI pipe.
 - The standard library's `sqlite3` became available for the ingestion state
-  (ADR-0008).
+  (ADR-0012).
 - FastAPI has no body size limit by default: a 64 KiB limit was added to keep
   the behaviour of Fastify.
 - The CI planned for phase 5 uses ruff, mypy and pytest instead of ESLint

@@ -1,11 +1,11 @@
-# ADR-0011: The conversation history stays in Open WebUI
+# ADR-0016: The conversation history stays in Open WebUI
 
 - **Status:** Accepted
 - **Date:** 2026-10-20
 
 ## Context
 
-With the chat through an Open WebUI pipe (ADR-0010), Open WebUI stores each
+With the chat through an Open WebUI pipe (ADR-0015), Open WebUI stores each
 conversation, as it does for any model, in its own database. memory-api
 stores the notes' chunks, the ingestion tasks and the graph, but no
 conversation.

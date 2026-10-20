@@ -1,6 +1,6 @@
-# ADR-0006: memory-api in TypeScript
+# ADR-0008: memory-api in TypeScript
 
-- **Status:** Superseded by [ADR-0007](0007-memory-api-in-python.md)
+- **Status:** Superseded by [ADR-0011](0011-memory-api-in-python.md)
 - **Date:** 2026-09-26 (merged with phase 2 on 2026-09-28)
 
 ## Context
@@ -34,7 +34,7 @@ Vitest, strict compiler options (`noUncheckedIndexedAccess`,
 - Its point ids and index version were recorded as reference values
   (`tests/golden`) before the code was removed, so the Python port kept the
   existing Qdrant index.
-- Superseded on 2026-10-19 by ADR-0007: the TypeScript code was removed
+- Superseded on 2026-10-19 by ADR-0011: the TypeScript code was removed
   (`9c4fee7`). Releases built before that date still run their TypeScript
   image on a rollback.
 
