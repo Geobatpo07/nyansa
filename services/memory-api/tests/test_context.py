@@ -35,11 +35,13 @@ def test_numbers_notes_by_their_best_hit_and_groups_their_chunks() -> None:
     ]
     # Chunks of a note are quoted in their order in the note.
     assert context.context == (
-        "[1] Docker (docker.md)\n"
+        '<note number="1">\n'
         "Section: Docker\nDocker is installed.\n\n"
-        "Section: Docker > Compose\nCompose runs the stack.\n\n"
-        "[2] Backup (backup.md)\n"
-        "Backups run nightly."
+        "Section: Docker > Compose\nCompose runs the stack.\n"
+        "</note>\n"
+        '<note number="2">\n'
+        "Backups run nightly.\n"
+        "</note>"
     )
 
 

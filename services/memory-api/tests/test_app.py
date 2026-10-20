@@ -264,7 +264,7 @@ async def test_context_returns_numbered_sources_and_the_text_to_quote(client: ht
         "Docker",
         ["Docker > Compose"],
     )
-    assert body["context"].startswith("[1] Docker (Docker.md)\nSection: Docker > Compose\nDocker compose runs")
+    assert body["context"].startswith('<note number="1">\nSection: Docker > Compose\nDocker compose runs')
 
 
 async def test_context_is_not_found_below_the_relevance_threshold(client: httpx.AsyncClient) -> None:

@@ -20,7 +20,8 @@ class Context(CamelModel):
     # False when no chunk passed the relevance threshold: there is nothing to answer from.
     found: bool
     sources: list[Source]
-    # Text given to the model: each source with its number, title, path and quoted chunks.
+    # Text given to the model: each note in a <note number="n"> tag with its quoted chunks.
+    # Small models follow tags better than headers, and do not copy them into the answer.
     context: str
 
 
@@ -58,6 +59,6 @@ def build_context(query: str, hits: list[SearchHit], max_chars: int) -> Context:
             else hit.payload["text"]
             for hit in sorted(note_hits, key=lambda hit: hit.payload["chunk_index"])
         ]
-        blocks.append(f"[{n}] {title} ({path})\n" + "\n\n".join(quotes))
+        blocks.append(f'<note number="{n}">\n' + "\n\n".join(quotes) + "\n</note>")
 
-    return Context(query=query, found=bool(sources), sources=sources, context="\n\n".join(blocks))
+    return Context(query=query, found=bool(sources), sources=sources, context="\n".join(blocks))
