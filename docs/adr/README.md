@@ -18,3 +18,6 @@ kept). New records start from [template.md](template.md).
 | [0009](0009-memory-api-as-the-single-facade.md) | memory-api is the only component that touches the memory stores | Accepted |
 | [0010](0010-chat-through-an-open-webui-pipe.md) | Chat through an Open WebUI pipe, with sources built from data | Accepted |
 | [0011](0011-conversation-history-stays-in-open-webui.md) | The conversation history stays in Open WebUI | Accepted |
+| [0012](0012-ladybugdb-for-the-graph.md) | LadybugDB for the graph of the vault | Accepted |
+| [0013](0013-related-notes-are-shown-not-given-to-the-model.md) | Linked notes are shown to the user, not given to the model | Accepted |
+| [0014](0014-back-up-only-what-cannot-be-rebuilt.md) | Back up only what cannot be rebuilt | Accepted |
