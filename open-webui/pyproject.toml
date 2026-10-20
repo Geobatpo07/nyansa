@@ -1,0 +1,45 @@
+[project]
+name = "nyansa-open-webui-pipe"
+version = "0.1.0"
+description = "Open WebUI function that chats with the Nyansa notes through n8n"
+license = "Apache-2.0"
+# Open WebUI v0.7.2 runs Python 3.11: the pipe must stay compatible.
+requires-python = ">=3.11"
+# Already shipped by Open WebUI; pinned to its versions for the tests.
+dependencies = [
+    "httpx==0.28.1",
+    "pydantic==2.12.5",
+]
+
+[dependency-groups]
+dev = [
+    "mypy==2.4.0",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.17.1",
+]
+
+# The pipe is pasted into Open WebUI, not installed: uv only installs the dependencies.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "PT", "S"]
+ignore = ["RUF001", "RUF003"]  # typographic characters in French messages
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S105", "S106"]  # assert and dummy tokens in tests
+
+[tool.mypy]
+strict = true
+python_version = "3.11"
+files = ["src", "tests"]
