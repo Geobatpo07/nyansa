@@ -7,7 +7,7 @@
 #   - every other published port is bound to 127.0.0.1;
 #   - PostgreSQL, Qdrant, Ollama and memory-api publish no port at all;
 #   - no container is privileged or uses the host network;
-#   - memory-api mounts the vault read-only.
+#   - memory-api mounts the vault read-only, and no other service mounts it.
 # Each combination must also pass `docker compose config`.
 #
 # Usage: scripts/check-exposure.sh [--file docker-compose.yml] [--env-file .env]
@@ -41,7 +41,7 @@ require_cmd docker jq
 
 # One line per violation; empty output means the configuration is compliant.
 read -r -d '' RULES <<'JQ' || true
-.services | to_entries[] | .key as $name | .value as $svc |
+. as $root | .services | to_entries[] | .key as $name | .value as $svc |
 (
   ($svc.ports // [])[]
   | select(.host_ip != "127.0.0.1")
@@ -58,6 +58,12 @@ read -r -d '' RULES <<'JQ' || true
   select($name == "nyansa-memory-api")
   | ($svc.volumes // [])[] | select(.target == "/vault" and .read_only != true)
   | "\($name): the vault must be mounted read-only"
+),
+(
+  $root.services["nyansa-memory-api"].volumes[]? | select(.target == "/vault") | .source as $vault
+  | select($name != "nyansa-memory-api")
+  | ($svc.volumes // [])[] | select(.source == $vault)
+  | "\($name): only memory-api may mount the vault"
 )
 JQ
 
