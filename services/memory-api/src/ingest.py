@@ -252,19 +252,29 @@ class Ingestor:
         await self._store.upsert_chunks(points[:1])
         return len(points)
 
+    async def build_graph_if_empty(self) -> GraphCounts | None:
+        """Builds the graph from the vault when it has no node (new, deleted or recreated file).
+
+        Called at startup: the graph needs neither Ollama nor Qdrant, so it
+        does not wait for the next ingestion. Returns None when the graph
+        already had nodes.
+        """
+        if self._graph is None:
+            return None
+        graph = self._graph
+
+        def build() -> GraphCounts | None:
+            stats = graph.stats()
+            if stats["notes"] or stats["ghosts"]:
+                return None
+            return _rebuild(graph, read_vault(self._vault_path))
+
+        return await asyncio.to_thread(build)
+
     async def _rebuild_graph(self, graph: Graph, notes: list[NoteFile], report: IngestReport) -> None:
         """Rebuilds the graph from every note of the vault, whatever the indexing did."""
-
-        def rebuild() -> GraphCounts:
-            data = build_graph([parse_note(note.path, note.content) for note in notes])
-            graph.replace(data)
-            ghosts = sum(note["ghost"] for note in data.notes)
-            return GraphCounts(
-                notes=len(data.notes) - ghosts, ghosts=ghosts, links=len(data.links), tags=len(data.tags)
-            )
-
         try:
-            report.graph = await asyncio.to_thread(rebuild)
+            report.graph = await asyncio.to_thread(_rebuild, graph, notes)
         except Exception as err:
             report.graph_error = str(err)
             log.warning("the graph was not rebuilt: %s", err)
@@ -277,6 +287,14 @@ class Ingestor:
             raise ValueError("the embedding model returned an empty vector")
         await self._store.ensure_collection(len(probe))
         self._collection_ready = True
+
+
+def _rebuild(graph: Graph, notes: list[NoteFile]) -> GraphCounts:
+    """Replaces the graph with the one of these notes (blocking: run it in a thread)."""
+    data = build_graph([parse_note(note.path, note.content) for note in notes])
+    graph.replace(data)
+    ghosts = sum(note["ghost"] for note in data.notes)
+    return GraphCounts(notes=len(data.notes) - ghosts, ghosts=ghosts, links=len(data.links), tags=len(data.tags))
 
 
 def embedding_text(title: str, section: str, text: str) -> str:

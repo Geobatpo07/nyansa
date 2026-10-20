@@ -305,3 +305,34 @@ async def test_indexes_the_notes_when_the_graph_is_unavailable(
     assert (report.notes.indexed, report.graph) == (1, None)
     assert report.graph_error is not None
     assert "Could not set lock" in report.graph_error
+
+
+async def test_builds_a_missing_or_empty_graph_at_startup_without_ollama_or_qdrant(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, graph: Graph
+) -> None:
+    vault.write("Alpha.md", "# Alpha\n[[Beta]] #projet")
+    vault.write("notes/Beta.md", "# Beta")
+    ingestor = Ingestor(str(vault.root), embedder, store, 200, graph)
+
+    # No graph file yet: built from the vault alone, nothing embedded or stored.
+    assert await ingestor.build_graph_if_empty() == GraphCounts(notes=2, ghosts=0, links=1, tags=1)
+    assert (embedder.documents_embedded, store.points) == (0, {})
+
+    # Already built: left as it is, even if the vault changed since.
+    vault.write("Gamma.md", "# Gamma")
+    assert await ingestor.build_graph_if_empty() is None
+    assert graph.stats()["notes"] == 2
+
+
+async def test_builds_the_graph_at_startup_after_an_unreadable_file_was_recreated(
+    vault: Vault, embedder: FakeEmbedder, store: InMemoryStore, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    vault.write("Alpha.md", "# Alpha")
+    path = tmp_path_factory.mktemp("state") / "graph.lbug"
+    path.write_bytes(b"not a graph" * 1000)
+    graph = Graph(path)
+    try:
+        built = await Ingestor(str(vault.root), embedder, store, 200, graph).build_graph_if_empty()
+        assert built == GraphCounts(notes=1, ghosts=0, links=0, tags=0)
+    finally:
+        graph.close()
