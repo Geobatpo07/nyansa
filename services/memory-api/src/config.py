@@ -23,6 +23,8 @@ class Config(BaseModel):
     # Bearer token required on every route except /health.
     MEMORY_API_TOKEN: str = Field(min_length=32)
     VAULT_PATH: str = Field("/vault", min_length=1)
+    # SQLite file of the ingestion tasks, in a writable volume.
+    STATE_PATH: str = Field("/state/memory-api.db", min_length=1)
     OLLAMA_URL: Url = "http://nyansa-ollama:11434"
     EMBEDDING_MODEL: str = Field("nomic-embed-text", min_length=1)
     QDRANT_URL: Url = "http://nyansa-qdrant:6333"

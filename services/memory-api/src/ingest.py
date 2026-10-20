@@ -28,13 +28,13 @@ MAX_CONSECUTIVE_UPSTREAM_FAILURES = 3
 log = logging.getLogger(__name__)
 
 
-class _CamelModel(BaseModel):
+class CamelModel(BaseModel):
     """Serialized with camelCase keys, the JSON convention of the HTTP API."""
 
     model_config = ConfigDict(alias_generator=to_camel, validate_by_name=True, serialize_by_alias=True)
 
 
-class NoteCounts(_CamelModel):
+class NoteCounts(CamelModel):
     scanned: int = 0
     indexed: int = 0
     unchanged: int = 0
@@ -44,16 +44,16 @@ class NoteCounts(_CamelModel):
     skipped: int = 0
 
 
-class ChunkCounts(_CamelModel):
+class ChunkCounts(CamelModel):
     upserted: int = 0
 
 
-class NoteError(_CamelModel):
+class NoteError(CamelModel):
     path: str
     message: str
 
 
-class IngestReport(_CamelModel):
+class IngestReport(CamelModel):
     mode: IngestMode
     started_at: str
     duration_ms: int = 0
@@ -118,17 +118,21 @@ class Ingestor:
     def is_running(self) -> bool:
         return self._running
 
-    async def run(self, mode: IngestMode) -> IngestReport:
-        """Runs one ingestion. Only one run at a time; a concurrent call fails fast."""
+    async def run(self, mode: IngestMode, on_progress: Callable[[int, int], None] | None = None) -> IngestReport:
+        """Runs one ingestion. Only one run at a time; a concurrent call fails fast.
+
+        on_progress(done, total) is called once the run is planned, then after
+        each note to index.
+        """
         if self._running:
             raise IngestInProgressError
         self._running = True
         try:
-            return await self._execute(mode)
+            return await self._execute(mode, on_progress or (lambda done, total: None))
         finally:
             self._running = False
 
-    async def _execute(self, mode: IngestMode) -> IngestReport:
+    async def _execute(self, mode: IngestMode, on_progress: Callable[[int, int], None]) -> IngestReport:
         started = self._now()
         await self._ensure_collection()
 
@@ -145,10 +149,11 @@ class Ingestor:
         )
         report = IngestReport(
             mode=mode,
-            started_at=_iso(started),
+            started_at=iso(started),
             notes=NoteCounts(scanned=len(notes), unchanged=len(plan.unchanged)),
         )
 
+        on_progress(0, len(plan.to_index))
         consecutive_upstream_failures = 0
         for position, path in enumerate(plan.to_index):
             note = notes[path]
@@ -173,6 +178,7 @@ class Ingestor:
                     )
                     log.error(report.aborted)
                     break
+            on_progress(position + 1, len(plan.to_index))
 
         for path in plan.to_delete:
             try:
@@ -197,7 +203,7 @@ class Ingestor:
         if len(vectors) != len(chunks):
             raise ValueError(f"expected {len(chunks)} embeddings, received {len(vectors)}")
 
-        indexed_at = _iso(self._now())
+        indexed_at = iso(self._now())
         links = sorted({link.target for link in note.links})
         points = [
             ChunkPoint(
@@ -253,6 +259,6 @@ def point_id(path: str, chunk_index: int) -> str:
     return f"{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:]}"
 
 
-def _iso(moment: datetime) -> str:
+def iso(moment: datetime) -> str:
     """ISO 8601 in UTC with milliseconds, e.g. `2026-09-26T12:00:00.000Z`."""
     return moment.astimezone(UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z")

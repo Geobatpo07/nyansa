@@ -21,6 +21,8 @@ volumes:
     name: nyansa_tailscale_state
   nyansa_tailscale_socket:
     name: nyansa_tailscale_socket
+  nyansa_memory_api_state:
+    name: nyansa_memory_api_state
 
 networks:
   nyansa:
@@ -271,6 +273,8 @@ services:
     volumes:
       # The service only reads the vault.
       - ${OBSIDIAN_VAULT_PATH}:/vault:ro
+      # Ingestion tasks (SQLite): the only writable path of the container.
+      - nyansa_memory_api_state:/state
     healthcheck:
       # /health checks Ollama and Qdrant too.
       # urlopen raises on 503, so the check fails while a dependency is down.
