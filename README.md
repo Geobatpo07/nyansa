@@ -117,6 +117,9 @@ sequenceDiagram
     W-->>You: answer, with the notes as citations
 ```
 
+The reasons behind these choices, and the options set aside, are recorded as
+architecture decision records in [docs/adr/](docs/adr/README.md).
+
 Only Caddy is reachable from outside. PostgreSQL, Qdrant, Ollama and
 memory-api publish no port. n8n and Open WebUI listen on `127.0.0.1` for SSH
 tunnels only. The Ollama container is named `nyansa-ollama` whatever the
@@ -338,7 +341,8 @@ example, how long the sourdough proofing takes.
 │   └── post-receive          # Server: push-to-deploy with rollback
 ├── tests/fixtures/vault/     # Small vault for end-to-end chat checks
 ├── docs/
-│   └── DEPLOY.md             # From-scratch deployment and operations guide
+│   ├── DEPLOY.md             # From-scratch deployment and operations guide
+│   └── adr/                  # Architecture decision records
 └── LICENSE                   # Apache License 2.0
 ```
 
