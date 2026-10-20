@@ -16,3 +16,5 @@ kept). New records start from [template.md](template.md).
 | [0007](0007-memory-api-in-python.md) | Python is the project's programming language | Accepted |
 | [0008](0008-asynchronous-ingestion-with-persisted-state.md) | Asynchronous ingestion with its state in SQLite | Accepted |
 | [0009](0009-memory-api-as-the-single-facade.md) | memory-api is the only component that touches the memory stores | Accepted |
+| [0010](0010-chat-through-an-open-webui-pipe.md) | Chat through an Open WebUI pipe, with sources built from data | Accepted |
+| [0011](0011-conversation-history-stays-in-open-webui.md) | The conversation history stays in Open WebUI | Accepted |
