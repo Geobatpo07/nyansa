@@ -57,6 +57,7 @@ async def main() -> None:
             history,
             embedder,
             store,
+            graph,
             config.CONTEXT_MIN_SCORE,
             config.CONTEXT_MAX_CHARS,
         )

@@ -6,16 +6,21 @@ import uuid
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from .context import Context, build_context
 from .domain import Embedder, UpstreamError, VectorStore
+from .graph import Graph, GraphUnavailableError
 from .jobs import IngestJobs, Job, JobInProgressError, JobStore
 
 MAX_BODY_BYTES = 64 * 1024
+
+# A vault path, e.g. `?path=Sport/Course%20%C3%A0%20pied.md`: a query
+# parameter, so spaces, accents and folders need no special routing.
+type NotePath = Annotated[str, Query(min_length=1, max_length=1024)]
 
 
 class IngestBody(BaseModel):
@@ -47,6 +52,7 @@ def build_app(
     history: JobStore,
     embedder: Embedder,
     store: VectorStore,
+    graph: Graph,
     context_min_score: float = 0.65,
     context_max_chars: int = 6000,
 ) -> FastAPI:
@@ -87,6 +93,11 @@ def build_app(
         return JSONResponse(
             {"error": "upstream service failure", "service": err.service, "detail": str(err)}, status_code=502
         )
+
+    # Only the /graph routes depend on the graph.
+    @app.exception_handler(GraphUnavailableError)
+    async def graph_unavailable(_request: Request, err: GraphUnavailableError) -> Response:
+        return JSONResponse({"error": "graph unavailable", "detail": str(err)}, status_code=503)
 
     @app.get("/health")
     async def health(response: Response) -> dict[str, object]:
@@ -141,6 +152,22 @@ def build_app(
         min_score = context_min_score if body.min_score is None else body.min_score
         hits = await store.search(vector, body.limit, body.normalized_tags(), min_score)
         return build_context(body.query, hits, context_max_chars)
+
+    @app.get("/graph/notes", response_model=None)
+    async def graph_note(path: NotePath) -> dict[str, object] | JSONResponse:
+        note = await asyncio.to_thread(graph.note, path)
+        return note if note is not None else JSONResponse({"error": "unknown note"}, status_code=404)
+
+    @app.get("/graph/neighbors", response_model=None)
+    async def graph_neighbors(
+        path: NotePath, depth: Annotated[int, Query(ge=1, le=2)] = 1
+    ) -> dict[str, object] | JSONResponse:
+        around = await asyncio.to_thread(graph.neighbors, path, depth)
+        return around if around is not None else JSONResponse({"error": "unknown note"}, status_code=404)
+
+    @app.get("/graph/stats")
+    async def graph_stats() -> dict[str, int]:
+        return await asyncio.to_thread(graph.stats)
 
     return app
 
