@@ -29,8 +29,8 @@ published on the host). Every other service publishes no port, or binds to
 
 ## Consequences
 
-- Exposure is enforced in `docker-compose.yml` and checked for the 9
-  combinations of hardware and access profiles by `check-exposure.sh`.
+- Which ports are published is enforced in Compose and checked by a script
+  ([ADR-0004](0004-exposure-enforced-in-compose.md)).
 - Caddy adds the security headers (HSTS, `nosniff`, `frame-ancestors`), also
   on error responses.
 - Webhook paths (`/webhook*`) pass without basic auth, so every n8n webhook

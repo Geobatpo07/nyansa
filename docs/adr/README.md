@@ -9,6 +9,9 @@ kept). New records start from [template.md](template.md).
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
 | [0002](0002-fork-the-n8n-self-hosted-ai-starter-kit.md) | Start from the n8n self-hosted AI starter kit | Accepted |
+| [0003](0003-local-models-sized-for-cpu.md) | Local models through Ollama, sized for CPU-only servers | Accepted |
+| [0004](0004-exposure-enforced-in-compose.md) | Port exposure is enforced in Compose and checked by a script | Accepted |
+| [0005](0005-n8n-secrets-injected-from-env.md) | n8n credentials carry no secret; secrets come from `.env` | Accepted |
 | [0006](0006-caddy-as-the-only-entry-point.md) | Caddy is the only entry point, without an API gateway | Accepted |
 | [0007](0007-deployment-through-git-hooks.md) | Deploy with Git hooks and immutable release folders | Accepted |
 | [0008](0008-memory-api-in-typescript.md) | memory-api in TypeScript | Superseded by [ADR-0011](0011-memory-api-in-python.md) |
