@@ -350,8 +350,16 @@ example, how long the sourdough proofing takes.
 
 ## Roadmap
 
-- Sync the Obsidian vault across devices with Syncthing.
-- CI: lint, typecheck, tests, workflow checks and Compose validation.
+- **Phase 4b — PDF ingestion** (in design, before phase 5). The PDFs of the
+  vault are indexed page by page and cited with a link to their page. Their
+  text is extracted by a separate, stateless service, `doc-extractor`, on an
+  internal network shared only with memory-api, each extraction limited in
+  time and memory. Scanned pages are reported, without OCR. See
+  [ADR-0020](docs/adr/0020-conventions-for-services.md) and
+  [ADR-0021](docs/adr/0021-pdf-extraction-in-an-isolated-service.md).
+- **Phase 5:**
+  - Sync the Obsidian vault across devices with Syncthing.
+  - CI: lint, typecheck, tests, workflow checks and Compose validation.
 - Graph-expanded context: give the model the notes linked to its sources,
   not only list them. Deferred from the graph memory phase until its effect can
   be measured on a set of reference questions; for now the linked notes are
