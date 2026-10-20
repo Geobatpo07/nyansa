@@ -295,6 +295,13 @@ flowchart LR
   for 2,000 notes and 6,000 links). A renamed or deleted note changes the
   resolution of the links pointing to it, so rebuilding is simpler and always
   right. Readers see the old graph or the new one, never a mix.
+- **Built at startup.** When the service starts and the graph is missing or
+  empty (first start, restore, recreated file), it is built from the vault
+  in the background, without waiting for an ingestion: it needs neither
+  Ollama nor Qdrant. A graph that already has nodes is left as it is.
+- **Not backed up.** `scripts/backup.sh` keeps the ingestion history of the
+  state volume (`memory-api.db`) but leaves out the graph files, which the
+  next start rebuilds.
 - **Links are resolved like Obsidian.** `[[Name]]` targets the note
   `Name.md` wherever it is, ignoring case and Unicode normalization (macOS
   writes accents decomposed); when several notes share the name, the shortest
@@ -319,7 +326,7 @@ flowchart LR
   - the file is **unreadable** (not a LadybugDB file, damaged pages or log,
     written by another LadybugDB version): the graph file and its own `.wal`
     and `.shadow` files are deleted, never anything else in `/state`, and an
-    empty graph is created; the next ingestion fills it;
+    empty graph is created and filled from the vault;
   - anything else, first of all the **lock held by another process**, but
     also a permission error or an unknown message: nothing is deleted, the
     `/graph` routes answer `503` and the next call tries again.
@@ -407,7 +414,7 @@ docker exec nyansa-open-webui curl -s -X POST http://nyansa-memory-api:8080/sear
   in an indented code block counts. One link is kept per pair of notes,
   without its heading or alias.
 - Graph: the `/graph` routes wait while the graph is rebuilt (about a second).
-  A new or empty graph file stays empty until the next ingestion (every 30
-  minutes, or `POST /ingest`). LadybugDB is still in 0.x: a version that
-  cannot read the file is handled as an unreadable file, rebuilt by the next
-  ingestion.
+  The graph follows changes to the vault at each ingestion (every 30 minutes,
+  or `POST /ingest`), not as they happen. LadybugDB is still in 0.x: a
+  version that cannot read the file is handled as an unreadable file, rebuilt
+  from the vault.

@@ -43,7 +43,8 @@ control. The name comes from the Akan word *nyansa*, "wisdom".
   release folder, backs up, deploys, waits for health and switches only on
   success. The previous release is restarted otherwise.
 - **Backups.** Scripts to back up and restore the PostgreSQL database and every
-  stateful volume, with checksums and retention.
+  stateful volume, with checksums and retention. Derived data (the graph,
+  downloaded models) is left out and rebuilt.
 - **Verifiable rules.** Scripts check the port exposure of all 9 profile
   combinations, refuse tracked secrets and check that every n8n webhook has
   its own authentication.
@@ -298,6 +299,9 @@ scripts/check-secrets.sh HEAD                       # tracked secrets
 scripts/check-n8n-workflows.sh                      # webhook auth, credentials without secrets
 scripts/tests/check-secrets.test.sh                 # tests of the secrets scanner (throwaway Git repo)
 scripts/tests/check-n8n-workflows.test.sh           # tests of the workflow checks
+scripts/check-env.sh .env                           # variables of .env.example missing from .env (names only)
+scripts/tests/check-env.test.sh                     # tests of the env check
+scripts/tests/backup-restore.test.sh                # backup then restore (clean Docker daemon only: it refuses otherwise)
 scripts/build-publish.sh HEAD                       # build and validate ./publish
 ```
 
@@ -323,6 +327,7 @@ example, how long the sourdough proofing takes.
 │   ├── check-exposure.sh             # Port exposure rules for every profile combination
 │   ├── check-secrets.sh              # Refuses tracked secrets
 │   ├── check-n8n-workflows.sh        # Webhook auth and secret-free credentials
+│   ├── check-env.sh                  # Variables missing from an env file (names only)
 │   ├── n8n-export.sh                 # Exports edited workflows back to n8n/workflows
 │   ├── tests/                        # Tests of the check scripts
 │   ├── build-publish.sh              # Builds a release folder from a commit

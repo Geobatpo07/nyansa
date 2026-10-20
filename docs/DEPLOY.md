@@ -467,12 +467,15 @@ night, add a cron entry for `nyansa` (`crontab -e`):
 ```
 
 Each backup contains a PostgreSQL dump, archives of the n8n, Qdrant,
-Open WebUI, Caddy and Tailscale volumes, a manifest and checksums. The
-services writing to those volumes are stopped for a few seconds during the
-copy. Downloaded models are left out (the Ollama volume and Open WebUI's
-`cache/`, about 1 GB): they are fetched again after a restore, which needs
-internet access. The memory-api state volume (ingestion history, graph) is
-left out too: the next ingestion rebuilds the graph from the vault. Backups are kept 14 days (`BACKUP_RETENTION_DAYS`). They are not
+Open WebUI, Caddy, Tailscale and memory-api volumes, a manifest and
+checksums. The services writing to those volumes are stopped for a few
+seconds during the copy (an ingestion running at that moment is recorded as
+interrupted; the next run completes it). Downloaded models are left out (the
+Ollama volume and Open WebUI's `cache/`, about 1 GB): they are fetched again
+after a restore, which needs internet access. From the memory-api volume,
+only the ingestion history (`memory-api.db`) is kept: the graph files
+(`graph.lbug*`) are left out, and memory-api rebuilds the graph from the
+vault when it starts after a restore. Backups are kept 14 days (`BACKUP_RETENTION_DAYS`). They are not
 encrypted and include chat history: copy them off the server to an encrypted
 destination (for example `restic`), together with a copy of `.env`.
 
@@ -515,8 +518,8 @@ The graph of memory-api needs nothing. Its file is locked by the one
 memory-api process; Compose stops the old container before starting the new
 one, on a deployment as on a rollback, so the new one always gets the lock.
 If an older release's LadybugDB cannot read the file, memory-api deletes
-the graph file (only it) and starts with an empty graph: run `POST /ingest`
-to rebuild it now rather than at the next scheduled run. If `/graph/stats`
+the graph file (only it) and rebuilds the graph from the vault as it starts.
+If `/graph/stats`
 answers `503`, its `detail` gives the reason; a lock held by another process
 is never resolved by deleting the file.
 
@@ -554,6 +557,24 @@ docker restart nyansa-n8n
 one, replace it from the editor instead (or set the addresses again after the
 import). Publishing is needed for the workflows that must be active
 (ingestion, chat, alerts); the restart applies it.
+
+### Check the production `.env` before a deployment
+
+A commit can add variables to `.env.example`. Before pushing it, compare
+the names of the production `.env` with those of the commit's template.
+`scripts/check-env.sh` lists the missing names (and, as warnings, the unknown
+ones), never a value. From the dev machine, at the commit to deploy:
+
+```bash
+ssh nyansa@server 'mkdir -p /tmp/nyansa-check'
+scp .env.example scripts/check-env.sh scripts/lib.sh nyansa@server:/tmp/nyansa-check/
+ssh nyansa@server 'bash /tmp/nyansa-check/check-env.sh /opt/nyansa/shared/.env --example /tmp/nyansa-check/.env.example'
+# [12:00:00] /opt/nyansa/shared/.env defines every variable of .env.example
+```
+
+Only the template and the script are copied; the production `.env` never
+leaves the server. Commented settings of the template are optional and not
+required.
 
 ### Upgrade an instance that still has the demo data
 
