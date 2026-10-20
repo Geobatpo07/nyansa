@@ -1,0 +1,60 @@
+{
+  "id": "nyAlertsOnError1",
+  "name": "Nyansa: e-mail on workflow failure",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "a4d6f8b0-2c3e-4d5f-9a0b-1c2d3e4f5a01",
+      "name": "Workflow failed",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "__ALERT_EMAIL_FROM__",
+        "toEmail": "__ALERT_EMAIL_TO__",
+        "subject": "=Failed: {{ $json.workflow.name }}",
+        "emailFormat": "text",
+        "text": "=The workflow \"{{ $json.workflow.name }}\" failed.\n\nError: {{ $json.execution.error.message }}\nNode: {{ $json.execution.lastNodeExecuted }}\nExecution: {{ $json.execution.url }}",
+        "options": {}
+      },
+      "id": "a4d6f8b0-2c3e-4d5f-9a0b-1c2d3e4f5a02",
+      "name": "Send the alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "nySmtpAlerts0001",
+          "name": "Nyansa alerts SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Workflow failed": {
+      "main": [
+        [
+          {
+            "node": "Send the alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "tags": []
+}

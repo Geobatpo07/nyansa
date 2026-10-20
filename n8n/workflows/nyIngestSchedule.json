@@ -1,0 +1,287 @@
+{
+  "id": "nyIngestSchedule",
+  "name": "Nyansa: index the vault every 30 minutes",
+  "active": true,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b01",
+      "name": "Every 30 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b09",
+      "name": "Run now (CLI or another workflow)",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://nyansa-memory-api:8080/ingest",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"mode\": \"incremental\"}",
+        "options": {
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b02",
+      "name": "Start the ingestion",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "nyMemoryApiCred1",
+          "name": "Nyansa memory-api"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 202: follow the new ingestion. 409: one is already running (started by\n// a previous execution or by hand), nothing to do. Anything else fails.\nconst { statusCode, body } = $json;\nif (statusCode === 202) {\n  return [{ json: { id: body.id, startedAt: Date.now() } }];\n}\nif (statusCode === 409) {\n  return [];\n}\nthrow new Error(`memory-api refused the ingestion: HTTP ${statusCode} ${JSON.stringify(body)}`);"
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b03",
+      "name": "Started?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 60,
+        "unit": "seconds"
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b04",
+      "name": "Wait 1 minute",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        660,
+        300
+      ],
+      "webhookId": "9d3f8b21-5c6e-4a7f-b2d3-4e5f6a7b8c91"
+    },
+    {
+      "parameters": {
+        "url": "=http://nyansa-memory-api:8080/ingest/status/{{ $('Started?').first().json.id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b05",
+      "name": "Ingestion status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        300
+      ],
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "nyMemoryApiCred1",
+          "name": "Nyansa memory-api"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Keeps waiting while the ingestion runs, for 2 hours at most. A completed\n// ingestion ends the execution; any other state fails it, which sends the\n// failure e-mail (error workflow).\nconst MAX_MS = 2 * 60 * 60 * 1000;\nconst { id, startedAt } = $('Started?').first().json;\nconst job = $json;\nif (job.status === 'running') {\n  if (Date.now() - startedAt > MAX_MS) {\n    throw new Error(`ingestion ${id} still running after 2 hours (${job.progress.done}/${job.progress.total} notes); it continues in memory-api`);\n  }\n  return [{ json: { id, running: true, progress: job.progress } }];\n}\nif (job.status === 'completed') {\n  return [{ json: { id, running: false, notes: job.report.notes, errors: job.report.errors } }];\n}\nthrow new Error(`ingestion ${id} ${job.status}: ${job.error ?? job.report?.aborted ?? 'no detail'}`);"
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b06",
+      "name": "Finished?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "7b2e5d3f-1c8a-4f4b-8e69-3d2c1b0a9f82",
+              "leftValue": "={{ $json.running }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b07",
+      "name": "Still running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1320,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8c2e7a10-4b5d-4f6e-a1c2-3d4e5f6a7b08",
+      "name": "Indexed",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1540,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Every 30 minutes": {
+      "main": [
+        [
+          {
+            "node": "Start the ingestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run now (CLI or another workflow)": {
+      "main": [
+        [
+          {
+            "node": "Start the ingestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start the ingestion": {
+      "main": [
+        [
+          {
+            "node": "Started?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Started?": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 minute",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 1 minute": {
+      "main": [
+        [
+          {
+            "node": "Ingestion status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingestion status": {
+      "main": [
+        [
+          {
+            "node": "Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finished?": {
+      "main": [
+        [
+          {
+            "node": "Still running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still running?": {
+      "main": [
+        [
+          {
+            "node": "Wait 1 minute",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Indexed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "nyAlertsOnError1"
+  },
+  "pinData": {},
+  "tags": []
+}

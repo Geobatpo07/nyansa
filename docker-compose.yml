@@ -53,9 +53,15 @@ x-n8n: &service-n8n
     # Workflows cannot read the container environment (and its secrets).
     - N8N_BLOCK_ENV_ACCESS_IN_NODE=true
     - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=true
-    # Injects the Qdrant API key into every credential of type qdrantApi at
-    # runtime. The key lives only in .env; rotating it needs a restart only.
-    - 'CREDENTIALS_OVERWRITE_DATA={"qdrantApi":{"apiKey":"${QDRANT_API_KEY}"}}'
+    # Secrets of the Nyansa credentials (n8n/credentials), injected at runtime
+    # into every credential of these types: they live only in .env, never in
+    # the n8n database or in exported workflows. Rotating one needs a restart.
+    # Values must not contain `"` or `\` (the setting is JSON).
+    - 'CREDENTIALS_OVERWRITE_DATA={"httpBearerAuth":{"token":"${MEMORY_API_TOKEN:?set MEMORY_API_TOKEN in .env}"},"httpHeaderAuth":{"value":"${N8N_WEBHOOK_TOKEN:?set N8N_WEBHOOK_TOKEN in .env}"},"smtp":{"host":"${SMTP_HOST:-}","port":${SMTP_PORT:-587},"secure":${SMTP_SECURE:-false},"user":"${SMTP_USER:-}","password":"${SMTP_PASSWORD:-}"}}'
+    # Addresses of the failure e-mails, written into the alert workflow when
+    # it is imported (n8n/workflows only holds placeholders).
+    - ALERT_EMAIL_FROM=${ALERT_EMAIL_FROM:-}
+    - ALERT_EMAIL_TO=${ALERT_EMAIL_TO:-}
 
 x-caddy: &service-caddy
   image: caddy:${CADDY_VERSION:-2.11.4-alpine}
@@ -136,18 +142,41 @@ services:
     hostname: nyansa-n8n-import
     container_name: nyansa-n8n-import
     entrypoint: /bin/sh
+    # Imports the credentials and workflows of n8n/ whose id does not exist
+    # yet, so a workflow edited in the editor is never overwritten. Workflows
+    # marked active in their file (ingestion and chat) are published.
     command:
       - "-c"
       - |
-        # n8n also prints log lines on stdout: count only workflow IDs.
-        if ! n8n list:workflow --onlyId 2>/dev/null | grep -Eq '^[A-Za-z0-9]{16}$$'; then
-          n8n import:credentials --separate --input=/demo-data/credentials && \
-          n8n import:workflow --separate --input=/demo-data/workflows
-        else
-          echo "Workflows exist, skipping import"
+        set -e
+        mkdir -p /tmp/import/credentials /tmp/import/workflows
+        # n8n also prints log lines on stdout: keep only the ids.
+        workflows=$$(n8n list:workflow --onlyId 2>/dev/null | grep -E '^[A-Za-z0-9]{16}$$' || true)
+        n8n export:credentials --all --output=/tmp/credentials.json >/dev/null 2>&1 || true
+        credentials=$$(grep -Eo '"id":"[A-Za-z0-9]{16}"' /tmp/credentials.json 2>/dev/null | cut -d'"' -f4 || true)
+        for file in /nyansa/credentials/*.json; do
+          id=$$(basename "$$file" .json)
+          echo "$$credentials" | grep -qx "$$id" || cp "$$file" /tmp/import/credentials/
+        done
+        for file in /nyansa/workflows/*.json; do
+          id=$$(basename "$$file" .json)
+          echo "$$workflows" | grep -qx "$$id" && continue
+          sed -e "s|__ALERT_EMAIL_FROM__|$$ALERT_EMAIL_FROM|g" -e "s|__ALERT_EMAIL_TO__|$$ALERT_EMAIL_TO|g" \
+            "$$file" > "/tmp/import/workflows/$$id.json"
+        done
+        if [ -n "$$(ls /tmp/import/credentials)" ]; then
+          n8n import:credentials --separate --input=/tmp/import/credentials
         fi
+        if [ -n "$$(ls /tmp/import/workflows)" ]; then
+          n8n import:workflow --separate --input=/tmp/import/workflows
+          # Import deactivates workflows: publish the ones marked active.
+          for file in $$(grep -l '"active": true' /tmp/import/workflows/*.json); do
+            n8n publish:workflow --id="$$(basename "$$file" .json)"
+          done
+        fi
+        echo "imported: $$(ls /tmp/import/credentials) $$(ls /tmp/import/workflows)"
     volumes:
-      - ./n8n/demo-data:/demo-data:ro
+      - ./n8n:/nyansa:ro
     depends_on:
       nyansa-postgres:
         condition: service_healthy
