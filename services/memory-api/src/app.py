@@ -2,6 +2,7 @@
 
 import asyncio
 import hmac
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Annotated, Literal
@@ -11,12 +12,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
-from .context import Context, build_context
+from .context import Context, RelatedNote, build_context
 from .domain import Embedder, UpstreamError, VectorStore
 from .graph import Graph, GraphUnavailableError
 from .jobs import IngestJobs, Job, JobInProgressError, JobStore
 
 MAX_BODY_BYTES = 64 * 1024
+# Notes linked to the sources listed under a chat answer.
+RELATED_NOTES = 5
+
+log = logging.getLogger(__name__)
 
 # A vault path, e.g. `?path=Sport/Course%20%C3%A0%20pied.md`: a query
 # parameter, so spaces, accents and folders need no special routing.
@@ -151,7 +156,15 @@ def build_app(
         vector = await embedder.embed_query(body.query)
         min_score = context_min_score if body.min_score is None else body.min_score
         hits = await store.search(vector, body.limit, body.normalized_tags(), min_score)
-        return build_context(body.query, hits, context_max_chars)
+        context = build_context(body.query, hits, context_max_chars)
+        if context.found:
+            # The answer does not depend on the graph: without it, no related notes.
+            try:
+                linked = await asyncio.to_thread(graph.linked, {s.path: s.n for s in context.sources}, RELATED_NOTES)
+                context.related = [RelatedNote.model_validate(note) for note in linked]
+            except Exception as err:
+                log.warning("no related notes: %s", err)
+        return context
 
     @app.get("/graph/notes", response_model=None)
     async def graph_note(path: NotePath) -> dict[str, object] | JSONResponse:

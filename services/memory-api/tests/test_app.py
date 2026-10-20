@@ -279,13 +279,22 @@ async def test_context_returns_numbered_sources_and_the_text_to_quote(client: ht
         ["Docker > Compose"],
     )
     assert body["context"].startswith('<note number="1">\nSection: Docker > Compose\nDocker compose runs')
+    # The note linking to the source is listed, not quoted.
+    assert body["related"] == [{"path": "Sport/Course à pied.md", "title": "Course à pied", "linkedTo": [1]}]
+    assert "Course" not in body["context"]
 
 
 async def test_context_is_not_found_below_the_relevance_threshold(client: httpx.AsyncClient) -> None:
     await ingest(client)
     # The fake embedder shares no word with this question: every score is 0, under the default 0.65.
     response = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics"})
-    assert response.json() == {"query": "quantum chromodynamics", "found": False, "sources": [], "context": ""}
+    assert response.json() == {
+        "query": "quantum chromodynamics",
+        "found": False,
+        "sources": [],
+        "context": "",
+        "related": [],
+    }
 
     relaxed = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics", "minScore": -1})
     assert relaxed.json()["found"] is True
@@ -349,7 +358,7 @@ async def test_only_the_graph_routes_fail_when_the_graph_is_unavailable(
         search = await client.post("/search", headers=AUTH, json={"query": "docker compose"})
         assert (search.status_code, search.json()["results"][0]["path"]) == (200, "Docker.md")
         context = await client.post("/context", headers=AUTH, json={"query": "docker compose stack profiles"})
-        assert (context.status_code, context.json()["found"]) == (200, True)
+        assert (context.status_code, context.json()["found"], context.json()["related"]) == (200, True, [])
         assert (await client.get("/health")).status_code == 200
     finally:
         holder.kill()
