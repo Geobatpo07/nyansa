@@ -247,3 +247,36 @@ async def test_maps_upstream_failures_to_502(
     response = await client.post("/search", headers=AUTH, json={"query": "x"})
     assert response.status_code == 502
     assert response.json()["service"] == "ollama"
+
+
+async def test_context_returns_numbered_sources_and_the_text_to_quote(client: httpx.AsyncClient) -> None:
+    await ingest(client)
+
+    response = await client.post("/context", headers=AUTH, json={"query": "docker compose stack profiles"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["found"] is True
+    first = body["sources"][0]
+    assert (first["n"], first["path"], first["title"], first["sections"]) == (
+        1,
+        "Docker.md",
+        "Docker",
+        ["Docker > Compose"],
+    )
+    assert body["context"].startswith("[1] Docker (Docker.md)\nSection: Docker > Compose\nDocker compose runs")
+
+
+async def test_context_is_not_found_below_the_relevance_threshold(client: httpx.AsyncClient) -> None:
+    await ingest(client)
+    # The fake embedder shares no word with this question: every score is 0, under the default 0.5.
+    response = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics"})
+    assert response.json() == {"query": "quantum chromodynamics", "found": False, "sources": [], "context": ""}
+
+    relaxed = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics", "minScore": -1})
+    assert relaxed.json()["found"] is True
+
+
+async def test_context_validates_its_body(client: httpx.AsyncClient) -> None:
+    for body in ({}, {"query": "x", "limit": 21}, {"query": "x", "extra": 1}):
+        assert (await client.post("/context", headers=AUTH, json=body)).status_code == 400

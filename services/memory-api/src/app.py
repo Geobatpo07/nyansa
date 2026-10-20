@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from .context import Context, build_context
 from .domain import Embedder, UpstreamError, VectorStore
 from .jobs import IngestJobs, Job, JobInProgressError, JobStore
 
@@ -31,8 +32,24 @@ class SearchBody(BaseModel):
     tags: Annotated[list[Annotated[str, StringConstraints(min_length=1)]], Field(max_length=20)] | None = None
     min_score: Annotated[float | None, Field(ge=-1, le=1, alias="minScore")] = None
 
+    def normalized_tags(self) -> list[str] | None:
+        return [tag.removeprefix("#").lower() for tag in self.tags] if self.tags is not None else None
 
-def build_app(token: str, jobs: IngestJobs, history: JobStore, embedder: Embedder, store: VectorStore) -> FastAPI:
+
+class ContextBody(SearchBody):
+    # Chunks to consider; minScore defaults to the service's relevance threshold.
+    limit: Annotated[int, Field(ge=1, le=20)] = 8
+
+
+def build_app(
+    token: str,
+    jobs: IngestJobs,
+    history: JobStore,
+    embedder: Embedder,
+    store: VectorStore,
+    context_min_score: float = 0.5,
+    context_max_chars: int = 6000,
+) -> FastAPI:
     app = FastAPI(title="Nyansa memory-api", docs_url=None, redoc_url=None)
     expected = token.encode()
 
@@ -101,8 +118,7 @@ def build_app(token: str, jobs: IngestJobs, history: JobStore, embedder: Embedde
     @app.post("/search")
     async def search(body: SearchBody) -> dict[str, object]:
         vector = await embedder.embed_query(body.query)
-        tags = [tag.removeprefix("#").lower() for tag in body.tags] if body.tags is not None else None
-        hits = await store.search(vector, body.limit, tags, body.min_score)
+        hits = await store.search(vector, body.limit, body.normalized_tags(), body.min_score)
         results = [
             {
                 "score": hit.score,
@@ -116,6 +132,15 @@ def build_app(token: str, jobs: IngestJobs, history: JobStore, embedder: Embedde
             for hit in hits
         ]
         return {"query": body.query, "results": results}
+
+    # The relevant notes for a chat answer, numbered so the answer can cite
+    # them. found is false when nothing passes the relevance threshold.
+    @app.post("/context")
+    async def context(body: ContextBody) -> Context:
+        vector = await embedder.embed_query(body.query)
+        min_score = context_min_score if body.min_score is None else body.min_score
+        hits = await store.search(vector, body.limit, body.normalized_tags(), min_score)
+        return build_context(body.query, hits, context_max_chars)
 
     return app
 

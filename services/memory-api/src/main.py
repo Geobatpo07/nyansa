@@ -42,7 +42,15 @@ async def main() -> None:
         ingestor = Ingestor(config.VAULT_PATH, embedder, store, config.CHUNK_MAX_CHARS)
         history = JobStore(config.STATE_PATH)
         jobs = IngestJobs(ingestor, history)
-        app = build_app(config.MEMORY_API_TOKEN, jobs, history, embedder, store)
+        app = build_app(
+            config.MEMORY_API_TOKEN,
+            jobs,
+            history,
+            embedder,
+            store,
+            config.CONTEXT_MIN_SCORE,
+            config.CONTEXT_MAX_CHARS,
+        )
         # uvicorn stops gracefully on SIGINT and SIGTERM. Its access log never
         # contains headers, so the bearer token is not logged.
         server = uvicorn.Server(
