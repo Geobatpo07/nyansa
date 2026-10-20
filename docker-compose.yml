@@ -268,7 +268,7 @@ services:
       - OLLAMA_URL=http://nyansa-ollama:11434
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - CHUNK_MAX_CHARS=${CHUNK_MAX_CHARS:-1500}
-      - CONTEXT_MIN_SCORE=${CONTEXT_MIN_SCORE:-0.5}
+      - CONTEXT_MIN_SCORE=${CONTEXT_MIN_SCORE:-0.65}
       - CONTEXT_MAX_CHARS=${CONTEXT_MAX_CHARS:-6000}
       - VAULT_PATH=/vault
       - LOG_LEVEL=${MEMORY_API_LOG_LEVEL:-info}

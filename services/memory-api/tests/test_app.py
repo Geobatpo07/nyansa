@@ -269,7 +269,7 @@ async def test_context_returns_numbered_sources_and_the_text_to_quote(client: ht
 
 async def test_context_is_not_found_below_the_relevance_threshold(client: httpx.AsyncClient) -> None:
     await ingest(client)
-    # The fake embedder shares no word with this question: every score is 0, under the default 0.5.
+    # The fake embedder shares no word with this question: every score is 0, under the default 0.65.
     response = await client.post("/context", headers=AUTH, json={"query": "quantum chromodynamics"})
     assert response.json() == {"query": "quantum chromodynamics", "found": False, "sources": [], "context": ""}
 

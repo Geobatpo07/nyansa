@@ -32,7 +32,7 @@ class Config(BaseModel):
     QDRANT_COLLECTION: str = Field("obsidian_notes", pattern=r"^[\w-]+$")
     CHUNK_MAX_CHARS: int = Field(1500, ge=200, le=8000)
     # /context: minimum similarity of a relevant chunk, and size of the context given to the model.
-    CONTEXT_MIN_SCORE: float = Field(0.5, ge=-1, le=1)
+    CONTEXT_MIN_SCORE: float = Field(0.65, ge=-1, le=1)
     CONTEXT_MAX_CHARS: int = Field(6000, ge=500, le=50000)
     LOG_LEVEL: Literal["fatal", "error", "warn", "info", "debug", "trace", "silent"] = "info"
 

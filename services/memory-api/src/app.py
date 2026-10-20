@@ -47,7 +47,7 @@ def build_app(
     history: JobStore,
     embedder: Embedder,
     store: VectorStore,
-    context_min_score: float = 0.5,
+    context_min_score: float = 0.65,
     context_max_chars: int = 6000,
 ) -> FastAPI:
     app = FastAPI(title="Nyansa memory-api", docs_url=None, redoc_url=None)
