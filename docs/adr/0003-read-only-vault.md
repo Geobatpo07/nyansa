@@ -22,8 +22,11 @@ stores (Qdrant, the memory-api state volume).
 - **Keep the vault mounted in n8n, read-write or read-only**: offered in the
   phase 3 plan (to write notes from n8n later); the owner chose to remove
   the mount. n8n reads the notes through memory-api.
-- Rationale to be confirmed: why the vault must stay read-only (beyond what
-  the commits record: no container can modify it).
+- **Let Nyansa write to the vault**: the vault is the source of truth,
+  written by its owner, and no bug or model must be able to alter it. With
+  the sync between devices planned for phase 5, a corruption would spread to
+  every device. Keeping the two apart always tells what the owner wrote from
+  what Nyansa derives, and a compromised container cannot modify the notes.
 
 ## Consequences
 

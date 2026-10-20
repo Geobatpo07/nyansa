@@ -15,9 +15,9 @@ memory-api's state volume also holds `memory-api.db`, the history of the
 ## Decision
 
 Backups contain what cannot be rebuilt: the PostgreSQL dump, the n8n,
-Qdrant, Open WebUI, Caddy and Tailscale volumes, and the memory-api state
-volume without the graph files (`graph.lbug*`). Downloaded models and the
-graph are left out.
+Open WebUI, Caddy and Tailscale volumes, and the memory-api state volume
+without the graph files (`graph.lbug*`); plus Qdrant, which is slow to
+rebuild. Downloaded models and the graph are left out.
 
 ## Alternatives considered
 
@@ -33,9 +33,10 @@ graph are left out.
   running then is recorded as interrupted, and the next run completes it.
 - After a restore, memory-api starts without a graph and builds it from the
   vault; downloaded models are fetched again, which needs internet access.
-- Qdrant is still backed up, as asked in phase 1, before memory-api made its
-  content derived from the vault; whether it should stay in the backups:
-  Rationale to be confirmed.
+- Qdrant stays in the backups as a recovery optimisation, not a protection
+  against data loss: its content is rebuilt from the vault, but that
+  recomputes every embedding on the CPU (17 minutes for 500 notes in
+  testing), and restoring it shortens the return to service.
 - `scripts/tests/backup-restore.test.sh` runs a backup then a restore on
   throwaway containers and refuses to run when any Nyansa container or
   volume exists.

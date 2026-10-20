@@ -20,10 +20,10 @@ Vitest, strict compiler options (`noUncheckedIndexedAccess`,
 
 ## Alternatives considered
 
-- **Hono instead of Fastify**: allowed by the plan; Rationale to be confirmed
-  for choosing Fastify.
-- Rationale to be confirmed for choosing TypeScript (the phase plan states
-  the language, not the reason).
+- **Hono instead of Fastify, or another language**: not compared in depth.
+  TypeScript and Fastify were chosen by default at implementation time: the
+  Node environment was available and the project was at the proof-of-concept
+  stage.
 
 ## Consequences
 

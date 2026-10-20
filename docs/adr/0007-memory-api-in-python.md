@@ -9,7 +9,15 @@ After phase 2, memory-api was a TypeScript service (ADR-0006) merged in
 `main`. The phase 3 plan, not yet started, added more code: asynchronous
 ingestion, a `/context` route for the chat and, as the recommended chat
 option, an Open WebUI pipe, which Open WebUI runs in Python. The Qdrant index
-of the TypeScript version was in use.
+of the TypeScript version was in use. The reasons for moving to Python:
+
+- the data and AI ecosystem;
+- the libraries of the next phases, LadybugDB for the phase 4 graph in
+  particular;
+- one language for every service;
+- consistency with the maintainer's data background;
+- portability;
+- uv, which makes managing dependencies and environments flexible and fast.
 
 ## Decision
 
@@ -26,7 +34,6 @@ and dependencies locked with uv; the TypeScript code was removed.
   OpenAPI schema written by hand.
 - **pip and `requirements.txt`**: no lock file with hashes without extra
   tools.
-- Rationale to be confirmed: why the project moved to Python.
 
 ## Consequences
 
@@ -40,6 +47,8 @@ and dependencies locked with uv; the TypeScript code was removed.
   the behaviour of Fastify.
 - The CI planned for phase 5 uses ruff, mypy and pytest instead of ESLint
   and Vitest. Developers need `uv`.
+- The choice was borne out later by phase 4b (pypdf now, Docling considered
+  later), which was not a reason for the decision of 2026-10-19.
 
 ## References
 

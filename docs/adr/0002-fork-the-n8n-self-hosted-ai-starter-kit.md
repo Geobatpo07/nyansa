@@ -19,8 +19,11 @@ what Nyansa changed.
 
 ## Alternatives considered
 
-- **Start from an empty repository**: Rationale to be confirmed (why the
-  fork was preferred is not written anywhere).
+- **Start from an empty repository**: the starter kit is a working,
+  recognised base where n8n, Ollama, Qdrant and PostgreSQL are already
+  integrated. Starting from it puts the effort on what makes Nyansa's value
+  (security, deployment, the RAG service), and the fork keeps the history and
+  the credits of the original project.
 
 ## Consequences
 

@@ -22,8 +22,9 @@ with the release.
 
 ## Alternatives considered
 
-- **An external CI/CD pipeline or an image registry**: Rationale to be
-  confirmed.
+- **An external CI/CD pipeline**: with one server and one developer, it
+  would have had to hold access to the production server.
+- **An image registry**: one more service to host and secure.
 
 ## Consequences
 
@@ -37,8 +38,8 @@ with the release.
   working one.
 - The production `.env` lives in `shared/` and is linked into each release;
   data volumes are shared by every release.
-- The images of the services in `services/` are built on the server, during
-  the deployment of each new release.
+- Trade-off accepted: the images of the services in `services/` are built on
+  the production server, during the deployment of each new release.
 
 ## References
 
