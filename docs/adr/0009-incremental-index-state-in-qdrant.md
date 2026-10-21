@@ -32,7 +32,8 @@ note path and the chunk index.
   run stopped in the middle of a note leaves its old hash, and the next run
   indexes it again.
 - Changing `EMBEDDING_MODEL` or `CHUNK_MAX_CHARS` changes `index_version`
-  and reindexes every note.
+  and reindexes every note when the collection's vector size matches; a different
+  embedding dimension requires a fresh collection.
 - The ids and `index_version` became a compatibility contract: the Python
   port reproduces them exactly, checked by golden tests (ADR-0011).
 - The ingestion tasks' history is a separate matter, kept in SQLite
