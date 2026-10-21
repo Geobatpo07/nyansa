@@ -22,9 +22,9 @@ published on the host). Every other service publishes no port, or binds to
 
 ## Alternatives considered
 
-- **A dedicated API gateway (Kong, Traefik...)**: not needed while no
-  external client calls the services; if that changes, Caddy will be
-  extended first (as stated by the maintainer when recording this ADR).
+- **A dedicated API gateway (Kong, Traefik...)**: not needed while external
+  access is limited to authenticated n8n webhooks; if broader API access is
+  needed, Caddy will be extended first (as stated by the maintainer when recording this ADR).
 - **One access mode only**: the owner chose to support both, as profiles.
 
 ## Consequences
