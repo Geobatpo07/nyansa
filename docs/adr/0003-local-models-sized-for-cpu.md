@@ -19,8 +19,8 @@ All inference runs locally in Ollama: `qwen2.5:3b` answers in the chat and
 ## Alternatives considered
 
 - **A hosted model API**: the notes would leave the server.
-- **`llama3.2`, the starter kit's model**: replaced by `qwen2.5:3b`;
-  Rationale to be confirmed.
+- **`llama3.2`, the starter kit's model**: replaced by `qwen2.5:3b`; the
+  reason was not recorded at the time of the choice.
 - **`qwen2.5:7b`**: considered in phase 3 if the RAM allows it;
   `qwen2.5:3b` was kept.
 
@@ -38,10 +38,17 @@ All inference runs locally in Ollama: `qwen2.5:3b` answers in the chat and
   reindexes every note.
 - Ollama has no authentication of its own and relies on network isolation
   (ADR-0004).
+- License: `qwen2.5:3b` is under the **Qwen Research License Agreement** (`qwen-research`), which grants use "for
+  non-commercial purposes only" (research or evaluation) and requires a
+  separate license from Qwen for commercial use. Nyansa does not ship the
+  weights (Ollama downloads them), but a commercial use of a deployment would
+  need that license or another model.
 
 ## References
 
 - `bfd2c90` (models of the Nyansa stack), `872b904`, `9d4030c`, `bba0217`.
+- Model card and license of Qwen2.5-3B-Instruct on Hugging Face
+  (`Qwen/Qwen2.5-3B-Instruct`, file `LICENSE`), checked on 2026-10-21.
 - `docker-compose.yml` (`nyansa-ollama-*`, `nyansa-ollama-pull-model`),
   README sections "Features" and "Tech stack",
   `services/memory-api/README.md` ("Known limits").
