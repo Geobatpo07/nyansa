@@ -117,6 +117,9 @@ sequenceDiagram
     W-->>You: answer, with the notes as citations
 ```
 
+The reasons behind these choices, and the options set aside, are recorded as
+architecture decision records in [docs/adr/](docs/adr/README.md).
+
 Only Caddy is reachable from outside. PostgreSQL, Qdrant, Ollama and
 memory-api publish no port. n8n and Open WebUI listen on `127.0.0.1` for SSH
 tunnels only. The Ollama container is named `nyansa-ollama` whatever the
@@ -338,7 +341,8 @@ example, how long the sourdough proofing takes.
 │   └── post-receive          # Server: push-to-deploy with rollback
 ├── tests/fixtures/vault/     # Small vault for end-to-end chat checks
 ├── docs/
-│   └── DEPLOY.md             # From-scratch deployment and operations guide
+│   ├── DEPLOY.md             # From-scratch deployment and operations guide
+│   └── adr/                  # Architecture decision records
 └── LICENSE                   # Apache License 2.0
 ```
 
@@ -346,12 +350,34 @@ example, how long the sourdough proofing takes.
 
 ## Roadmap
 
-- Sync the Obsidian vault across devices with Syncthing.
-- CI: lint, typecheck, tests, workflow checks and Compose validation.
+- **Phase 4b — PDF ingestion** (in design, before phase 5). The PDFs of the
+  vault are indexed page by page and cited with a link to their page. Their
+  text is extracted by a separate, stateless service, `doc-extractor`, on an
+  internal network shared only with memory-api, each extraction limited in
+  time and memory. Scanned pages are reported, without OCR. See
+  [ADR-0020](docs/adr/0020-conventions-for-services.md) and
+  [ADR-0021](docs/adr/0021-pdf-extraction-in-an-isolated-service.md).
+- **Phase 5:**
+  - Sync the Obsidian vault across devices with Syncthing.
+  - CI: lint, typecheck, tests, workflow checks and Compose validation.
 - Graph-expanded context: give the model the notes linked to its sources,
   not only list them. Deferred from the graph memory phase until its effect can
   be measured on a set of reference questions; for now the linked notes are
   shown to you and never sent to the model.
+- **Phase 6 — Evolving memory and supervised autonomy** (planned, after
+  phase 5). The vault stays the human source of truth, read-only. Nyansa
+  keeps its own separate memory, where every item records its type, origin,
+  date, supporting notes and status (proposed, accepted, rejected). Autonomy
+  is capped: Nyansa proposes and I approve; nothing is written without my
+  approval, and n8n workflows fix the sequence of steps. Planned parts:
+  - episodic memory built from a structured conversation history with cited
+    notes;
+  - facts learned from conversations;
+  - proposals (missing links, duplicates, contradictions);
+  - a weekly read-only review;
+  - an approval step where accepted items are written to a single inbox
+    folder by the only component allowed to write;
+  - an evaluation set of reference questions.
 
 ## Credits
 
