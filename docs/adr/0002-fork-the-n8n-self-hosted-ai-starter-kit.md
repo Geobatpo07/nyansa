@@ -33,8 +33,9 @@ what Nyansa changed.
   `nyansa`; ports no longer published; Caddy, Open WebUI, memory-api, backups
   and the deployment pipeline added; the demo workflow and credentials
   replaced by the Nyansa ones (`856381a`).
-- The Apache License 2.0 requires keeping the license and stating the
-  changes: the README has a Credits section for this.
+- The Apache License 2.0 requires recipients to receive a copy of the license and
+  modified files to carry prominent notices stating they were changed; README
+  credits provide attribution but do not replace those notices.
 
 ## References
 
